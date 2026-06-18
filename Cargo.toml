@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = ["peios-sys", "peios"]
+
+# peios-rs is its own workspace root, like libpeios. It binds against libpeios
+# as a C library (FFI), never against libpeios' internal Rust crates.

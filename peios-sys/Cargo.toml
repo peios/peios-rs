@@ -1,0 +1,26 @@
+[package]
+name = "peios-sys"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Raw FFI bindings to libpeios (the Peios userspace C ABI)"
+# `links` must equal libpeios' [lib] name (`peios`). Cargo enforces one -sys
+# crate per native lib, which is exactly what we want for libpeios.so.
+links = "peios"
+build = "build.rs"
+
+[features]
+default = []           # → dynamic link against libpeios.so
+static = []            # → static link against libpeios.a
+# Reuse the canonical Rust mirror of the pkm uapi types instead of letting
+# bindgen emit its own copy. See build.rs + the README.
+uapi = ["dep:peios-uapi"]
+
+[dependencies]
+# Optional: the same generated #[repr(C)] mirror libpeios itself consumes,
+# pinned to the same pkm rev so the kacs_*/pkm types are one identity.
+peios-uapi = { git = "https://github.com/peios/pkm.git", rev = "c7ffa2b91b4857fda8ae5bfb12e2a848ffc3030d", default-features = false, optional = true }
+
+[build-dependencies]
+bindgen = "0.70"
+pkg-config = "0.3"
