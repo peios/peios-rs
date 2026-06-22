@@ -10,12 +10,16 @@
 mod acl;
 mod mask;
 mod sd;
+pub mod sddl;
 mod sid;
 
 pub use acl::{Ace, AceFlags, AceType, AceView, Acl, AclBuilder, AclView, LabelPolicy, SidAndAttributes, SidArrayView};
 pub use mask::{AccessMask, GenericMapping, Privileges};
 pub use sd::{Control, SdBuilder, SdView, SecurityDescriptor};
 pub use sid::{IntegrityLevel, Sid, SidRef, WellKnown};
+// SD inheritance reads naturally at the security root; the SDDL text codec
+// stays namespaced under `security::sddl`.
+pub use sddl::{reinherit, strip_inherited};
 
 // Internal helpers other modules reach for.
 pub(crate) use sid::raw as sid_raw;

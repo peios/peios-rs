@@ -82,5 +82,31 @@ where
     Err(Error::from_raw_os_error(ERANGE))
 }
 
-/// `ERANGE` without pulling in the `libc` crate (stable on Linux).
+/// Drive a getxattr-style size probe for a NUL-terminated string result.
+///
+/// Like [`probe`], but for libpeios' `emit_str` convention: the probe
+/// (`cap == 0`) returns the string length *excluding* the trailing NUL, and a
+/// real write needs `cap >= len + 1`. Returns the decoded `String`.
+pub(crate) fn probe_str<F>(mut f: F) -> Result<String>
+where
+    F: FnMut(*mut core::ffi::c_char, usize) -> isize,
+{
+    let mut cap = check_len(f(core::ptr::null_mut(), 0))?;
+    for _ in 0..4 {
+        let mut buf = vec![0u8; cap + 1];
+        let ret = f(buf.as_mut_ptr() as *mut core::ffi::c_char, buf.len());
+        if ret >= 0 {
+            buf.truncate(ret as usize);
+            return String::from_utf8(buf).map_err(|_| Error::from_raw_os_error(EINVAL));
+        }
+        match Error::last_os_error().raw_os_error() {
+            Some(e) if e == ERANGE => cap = check_len(f(core::ptr::null_mut(), 0))?,
+            _ => return Err(Error::last_os_error()),
+        }
+    }
+    Err(Error::from_raw_os_error(ERANGE))
+}
+
+/// `ERANGE` / `EINVAL` without pulling in the `libc` crate (stable on Linux).
 const ERANGE: i32 = 34;
+const EINVAL: i32 = 22;

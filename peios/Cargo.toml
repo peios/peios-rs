@@ -1,6 +1,6 @@
 [package]
 name = "peios"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Safe, idiomatic Rust bindings to libpeios"
@@ -12,4 +12,4 @@ uapi = ["peios-sys/uapi"]
 
 [dependencies]
 bitflags = "2.13.0"
-peios-sys = { path = "../peios-sys", version = "0.1.0" }
+peios-sys = { path = "../peios-sys", version = "0.2.0" }
