@@ -46,14 +46,31 @@ fn main() {
     // so it — not abi/peios-abi.h — is what we bind.
     let mut builder = bindgen::Builder::default()
         .header_contents("wrapper.h", "#include <peios.h>")
+        // libpeios' own surface: the peios_* functions/types and the libpeios-
+        // defined PEIOS_* macros (e.g. PEIOS_SID_MAX_BYTES).
         .allowlist_function("peios_.*")
         .allowlist_type("peios_.*")
         .allowlist_var("peios_.*")
+        .allowlist_var("PEIOS_.*")
+        // The pkm UAPI wire constants the peios ABI is parameterised by. The
+        // headers document these as the names callers use directly (info classes,
+        // access-right masks, dispositions, value/ACE types, notify filters, …),
+        // so -sys must expose them. bindgen pulls referenced *types* transitively
+        // but never #define constants, so the families are allowlisted explicitly.
+        // (Under `uapi` they are blocklisted again below and sourced from
+        // peios-uapi instead — see there.)
+        .allowlist_var("KACS_.*")
+        .allowlist_var("REG_.*")
+        .allowlist_var("KEY_.*")
+        .allowlist_var("KMES_.*")
+        // Emit `cargo:rerun-if-changed` for exactly the headers clang opens, so a
+        // header edit regenerates the bindings (a dir path only tracks its entry
+        // list, not edits to files within — and never nested headers).
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .use_core();
 
     for inc in &include_dirs {
         builder = builder.clang_arg(format!("-I{}", inc.display()));
-        println!("cargo:rerun-if-changed={}", inc.display());
     }
 
     // --- pkm-type reuse (feature = "uapi") ----------------------------------
@@ -65,6 +82,14 @@ fn main() {
         builder = builder
             .blocklist_type("kacs_.*")
             .blocklist_type("pkm_.*")
+            // The wire constants too: peios-uapi mirrors the same pkm rev, so they
+            // come from its re-export rather than a second bindgen-emitted copy
+            // (two `pub const KACS_*` in scope would collide). The libpeios-owned
+            // peios_*/PEIOS_* surface is NOT blocklisted — peios-uapi has none of it.
+            .blocklist_var("KACS_.*")
+            .blocklist_var("REG_.*")
+            .blocklist_var("KEY_.*")
+            .blocklist_var("KMES_.*")
             .raw_line("pub use peios_uapi::*;");
     }
 

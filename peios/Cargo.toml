@@ -11,4 +11,5 @@ static = ["peios-sys/static"]
 uapi = ["peios-sys/uapi"]
 
 [dependencies]
+bitflags = "2.13.0"
 peios-sys = { path = "../peios-sys", version = "0.1.0" }
