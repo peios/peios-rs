@@ -32,6 +32,10 @@ const EINVAL: i32 = 22;
 const ENOENT: i32 = 2;
 const ERANGE: i32 = 34;
 
+const WATCH_EVENT_MIN_SIZE: usize = 8;
+const SUBTREE_WATCH_EVENT_DEPTH_LEN: usize = 2;
+const WATCH_COMPONENT_LEN_FIELD: usize = 2;
+
 bitflags! {
     /// Key access-right mask: the key-object rights plus the standard rights.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -65,6 +69,53 @@ bitflags! {
         /// Standard: access the SACL.
         const ACCESS_SYSTEM_SECURITY = sys::KACS_ACCESS_ACCESS_SYSTEM_SECURITY;
     }
+}
+
+/// A registry watch event kind returned by [`Key::read_watch_events`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WatchEventType {
+    /// A value was set.
+    ValueSet,
+    /// A value was deleted.
+    ValueDeleted,
+    /// A subkey was created.
+    SubkeyCreated,
+    /// A subkey was deleted.
+    SubkeyDeleted,
+    /// The security descriptor changed.
+    SecurityDescriptorChanged,
+    /// The watched key was deleted.
+    KeyDeleted,
+    /// The watch queue overflowed; callers should refresh from a full snapshot.
+    Overflow,
+    /// An event kind unknown to this crate version.
+    Other(u16),
+}
+
+impl WatchEventType {
+    fn from_raw(raw: u16) -> Self {
+        match u32::from(raw) {
+            sys::REG_WATCH_VALUE_SET => Self::ValueSet,
+            sys::REG_WATCH_VALUE_DELETED => Self::ValueDeleted,
+            sys::REG_WATCH_SUBKEY_CREATED => Self::SubkeyCreated,
+            sys::REG_WATCH_SUBKEY_DELETED => Self::SubkeyDeleted,
+            sys::REG_WATCH_SD_CHANGED => Self::SecurityDescriptorChanged,
+            sys::REG_WATCH_KEY_DELETED => Self::KeyDeleted,
+            sys::REG_WATCH_OVERFLOW => Self::Overflow,
+            _ => Self::Other(raw),
+        }
+    }
+}
+
+/// One raw LCS registry watch event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WatchEvent {
+    /// The event kind.
+    pub event_type: WatchEventType,
+    /// The changed value or subkey name, when carried by this event.
+    pub name: Vec<u8>,
+    /// Subtree path components from the watched key to the changed key.
+    pub path: Vec<Vec<u8>>,
 }
 
 bitflags! {
@@ -338,7 +389,10 @@ impl Transaction {
         // SAFETY: live fd; both out-params writable.
         check(unsafe { sys::peios_reg_txn_status(self.raw(), &mut state, &mut terminal_errno) })?;
         let state = TxnState::from_raw(state).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
-        Ok(TxnStatus { state, terminal_errno })
+        Ok(TxnStatus {
+            state,
+            terminal_errno,
+        })
     }
 }
 
@@ -607,12 +661,15 @@ impl Key {
             };
             // SAFETY: live fd; `v` describes the two output windows
             // (`name`/`data` live here).
-            let ret =
-                unsafe { sys::peios_reg_enum_value(self.raw(), index, txn_fd, &mut v) };
+            let ret = unsafe { sys::peios_reg_enum_value(self.raw(), index, txn_fd, &mut v) };
             if ret == 0 {
                 name.truncate(v.name_len as usize);
                 data.truncate(v.data_len as usize);
-                return Ok(Some(EnumValue { name, ty: ValueType(v.type_), data }));
+                return Ok(Some(EnumValue {
+                    name,
+                    ty: ValueType(v.type_),
+                    data,
+                }));
             }
             match Error::last_os_error().raw_os_error() {
                 Some(e) if e == ENOENT => return Ok(None),
@@ -632,7 +689,12 @@ impl Key {
     ///
     /// [`enum_value`]: Key::enum_value
     pub fn values<'a>(&'a self, txn: Option<&'a Transaction>) -> Values<'a> {
-        Values { key: self, txn, index: 0, done: false }
+        Values {
+            key: self,
+            txn,
+            index: 0,
+            done: false,
+        }
     }
 
     // ---- subkeys / metadata / watches -------------------------------------
@@ -653,8 +715,7 @@ impl Key {
             };
             // SAFETY: live fd; `v` describes the name output window (`name`
             // lives here).
-            let ret =
-                unsafe { sys::peios_reg_enum_subkey(self.raw(), index, txn_fd, &mut v) };
+            let ret = unsafe { sys::peios_reg_enum_subkey(self.raw(), index, txn_fd, &mut v) };
             if ret == 0 {
                 name.truncate(v.name_len as usize);
                 return Ok(Some(Subkey {
@@ -678,7 +739,12 @@ impl Key {
     ///
     /// [`enum_subkey`]: Key::enum_subkey
     pub fn subkeys<'a>(&'a self, txn: Option<&'a Transaction>) -> Subkeys<'a> {
-        Subkeys { key: self, txn, index: 0, done: false }
+        Subkeys {
+            key: self,
+            txn,
+            index: 0,
+            done: false,
+        }
     }
 
     /// Read this key's name and metadata (requires `READ_CONTROL`).
@@ -754,6 +820,57 @@ impl Key {
         check(unsafe {
             sys::peios_reg_notify(self.raw(), filter.bits(), subtree as core::ffi::c_int)
         })
+    }
+
+    /// Enable or disable `O_NONBLOCK` on this key fd.
+    ///
+    /// This is useful for event-loop driven watch consumers: after arming
+    /// [`Key::notify`], make the fd nonblocking and use poll/epoll readiness
+    /// before [`Key::read_watch_events`].
+    pub fn set_nonblocking(&self, nonblocking: bool) -> Result<()> {
+        // SAFETY: live key fd; `F_GETFL` does not use the variadic argument.
+        let flags = unsafe { libc::fcntl(self.raw(), libc::F_GETFL) };
+        if flags < 0 {
+            return Err(Error::last_os_error());
+        }
+
+        let new_flags = if nonblocking {
+            flags | libc::O_NONBLOCK
+        } else {
+            flags & !libc::O_NONBLOCK
+        };
+        if new_flags == flags {
+            return Ok(());
+        }
+
+        // SAFETY: live key fd; `new_flags` is the required variadic argument for `F_SETFL`.
+        if unsafe { libc::fcntl(self.raw(), libc::F_SETFL, new_flags) } < 0 {
+            return Err(Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    /// Read and decode pending watch records from this key fd.
+    ///
+    /// The key must have been armed with [`Key::notify`]. The caller supplies the
+    /// read buffer so long-running event loops can reuse storage. On nonblocking
+    /// fds, a would-block read returns an empty vector.
+    ///
+    /// Malformed kernel records are reported as `EINVAL`.
+    pub fn read_watch_events(&self, buffer: &mut [u8]) -> Result<Vec<WatchEvent>> {
+        if buffer.is_empty() {
+            return Err(Error::from_raw_os_error(EINVAL));
+        }
+        // SAFETY: live key fd; `buffer` is a writable byte slice for `len` bytes.
+        let n = unsafe { libc::read(self.raw(), buffer.as_mut_ptr().cast(), buffer.len()) };
+        if n < 0 {
+            let error = Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::WouldBlock {
+                return Ok(Vec::new());
+            }
+            return Err(error);
+        }
+        parse_watch_events(&buffer[..n as usize])
     }
 
     /// Force the source to persist this key's hive's pending writes (requires
@@ -879,6 +996,75 @@ impl IntoRawFd for Key {
     fn into_raw_fd(self) -> RawFd {
         self.0.into_raw_fd()
     }
+}
+
+fn parse_watch_events(mut buffer: &[u8]) -> Result<Vec<WatchEvent>> {
+    let mut events = Vec::new();
+    while !buffer.is_empty() {
+        if buffer.len() < WATCH_EVENT_MIN_SIZE {
+            return Err(Error::from_raw_os_error(EINVAL));
+        }
+
+        let total_len = u32::from_le_bytes(buffer[0..4].try_into().expect("slice length")) as usize;
+        let event_type = u16::from_le_bytes(buffer[4..6].try_into().expect("slice length"));
+        let name_len = u16::from_le_bytes(buffer[6..8].try_into().expect("slice length")) as usize;
+
+        if total_len < WATCH_EVENT_MIN_SIZE || total_len > buffer.len() {
+            return Err(Error::from_raw_os_error(EINVAL));
+        }
+        let name_end = WATCH_EVENT_MIN_SIZE + name_len;
+        if name_end > total_len {
+            return Err(Error::from_raw_os_error(EINVAL));
+        }
+
+        let record = &buffer[..total_len];
+        let name = decode_watch_component(&record[WATCH_EVENT_MIN_SIZE..name_end])?;
+        let path = parse_watch_path(&record[name_end..])?;
+        events.push(WatchEvent {
+            event_type: WatchEventType::from_raw(event_type),
+            name,
+            path,
+        });
+        buffer = &buffer[total_len..];
+    }
+    Ok(events)
+}
+
+fn parse_watch_path(mut extension: &[u8]) -> Result<Vec<Vec<u8>>> {
+    if extension.is_empty() {
+        return Ok(Vec::new());
+    }
+    if extension.len() < SUBTREE_WATCH_EVENT_DEPTH_LEN {
+        return Err(Error::from_raw_os_error(EINVAL));
+    }
+
+    let depth = u16::from_le_bytes(extension[..2].try_into().expect("slice length")) as usize;
+    extension = &extension[SUBTREE_WATCH_EVENT_DEPTH_LEN..];
+    let mut path = Vec::with_capacity(depth);
+    for _ in 0..depth {
+        if extension.len() < WATCH_COMPONENT_LEN_FIELD {
+            return Err(Error::from_raw_os_error(EINVAL));
+        }
+        let len = u16::from_le_bytes(extension[..2].try_into().expect("slice length")) as usize;
+        extension = &extension[WATCH_COMPONENT_LEN_FIELD..];
+        if extension.len() < len {
+            return Err(Error::from_raw_os_error(EINVAL));
+        }
+        path.push(decode_watch_component(&extension[..len])?);
+        extension = &extension[len..];
+    }
+
+    if !extension.is_empty() {
+        return Err(Error::from_raw_os_error(EINVAL));
+    }
+    Ok(path)
+}
+
+fn decode_watch_component(bytes: &[u8]) -> Result<Vec<u8>> {
+    if bytes.contains(&0) {
+        return Err(Error::from_raw_os_error(EINVAL));
+    }
+    Ok(bytes.to_vec())
 }
 
 /// A terminal builder for [`Key::set_value`].
@@ -1010,6 +1196,88 @@ impl Iterator for Subkeys<'_> {
                 Some(Err(e))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_watch_events, Error, WatchEvent, WatchEventType};
+
+    #[test]
+    fn parses_direct_watch_record() {
+        let bytes = record(1, b"DisplayName", None);
+
+        assert_eq!(
+            parse_watch_events(&bytes).expect("parse"),
+            vec![WatchEvent {
+                event_type: WatchEventType::ValueSet,
+                name: b"DisplayName".to_vec(),
+                path: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn parses_subtree_watch_record() {
+        let bytes = record(
+            3,
+            b"worker",
+            Some(&[b"app".as_slice(), b"child".as_slice()]),
+        );
+
+        assert_eq!(
+            parse_watch_events(&bytes).expect("parse"),
+            vec![WatchEvent {
+                event_type: WatchEventType::SubkeyCreated,
+                name: b"worker".to_vec(),
+                path: vec![b"app".to_vec(), b"child".to_vec()],
+            }],
+        );
+    }
+
+    #[test]
+    fn parses_overflow_watch_record() {
+        let bytes = record(7, b"", None);
+
+        assert_eq!(
+            parse_watch_events(&bytes).expect("parse"),
+            vec![WatchEvent {
+                event_type: WatchEventType::Overflow,
+                name: Vec::new(),
+                path: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn malformed_watch_record_returns_einval() {
+        let mut bytes = record(1, b"DisplayName", None);
+        bytes[0..4].copy_from_slice(&7u32.to_le_bytes());
+
+        assert_eq!(
+            parse_watch_events(&bytes)
+                .expect_err("malformed")
+                .raw_os_error(),
+            Error::from_raw_os_error(super::EINVAL).raw_os_error(),
+        );
+    }
+
+    fn record(event_type: u16, name: &[u8], path: Option<&[&[u8]]>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(&event_type.to_le_bytes());
+        bytes.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        bytes.extend_from_slice(name);
+        if let Some(path) = path {
+            bytes.extend_from_slice(&(path.len() as u16).to_le_bytes());
+            for component in path {
+                bytes.extend_from_slice(&(component.len() as u16).to_le_bytes());
+                bytes.extend_from_slice(component);
+            }
+        }
+        let total_len = bytes.len() as u32;
+        bytes[0..4].copy_from_slice(&total_len.to_le_bytes());
+        bytes
     }
 }
 

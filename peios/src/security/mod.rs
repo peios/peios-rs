@@ -13,7 +13,10 @@ mod sd;
 pub mod sddl;
 mod sid;
 
-pub use acl::{Ace, AceFlags, AceType, AceView, Acl, AclBuilder, AclView, LabelPolicy, SidAndAttributes, SidArrayView};
+pub use acl::{
+    Ace, AceFlags, AceType, AceView, Acl, AclBuilder, AclView, GroupAttributes, LabelPolicy,
+    SidAndAttributes, SidArrayView,
+};
 pub use mask::{AccessMask, GenericMapping, Privileges};
 pub use sd::{Control, SdBuilder, SdView, SecurityDescriptor};
 pub use sid::{IntegrityLevel, Sid, SidRef, WellKnown};

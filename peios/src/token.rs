@@ -15,9 +15,7 @@ use bitflags::bitflags;
 use peios_sys as sys;
 
 use crate::error::{Error, Result};
-use crate::security::{
-    GenericMapping, IntegrityLevel, Privileges, Sid, SidArrayView, SidRef,
-};
+use crate::security::{GenericMapping, IntegrityLevel, Privileges, Sid, SidArrayView, SidRef};
 use crate::util::{check, check_fd, check_len, probe};
 
 bitflags! {
@@ -208,7 +206,8 @@ impl Token {
     /// The primary token of the process referred to by `pidfd`.
     pub fn open_process(pidfd: BorrowedFd<'_>, access: TokenAccess) -> Result<Token> {
         // SAFETY: `pidfd` is a live borrowed fd for the duration of the call.
-        check_fd(unsafe { sys::peios_token_open_process(pidfd.as_raw_fd(), access.bits()) }).map(Token)
+        check_fd(unsafe { sys::peios_token_open_process(pidfd.as_raw_fd(), access.bits()) })
+            .map(Token)
     }
 
     /// Thread `tid`'s impersonation token (or the process primary token if it is
@@ -230,7 +229,8 @@ impl Token {
     /// Requires `SeCreateTokenPrivilege`.
     pub fn from_spec(spec: &[u8]) -> Result<Token> {
         // SAFETY: (ptr, len) from a live slice.
-        check_fd(unsafe { sys::peios_token_create_raw(spec.as_ptr().cast(), spec.len()) }).map(Token)
+        check_fd(unsafe { sys::peios_token_create_raw(spec.as_ptr().cast(), spec.len()) })
+            .map(Token)
     }
 
     /// The canonical KACS generic mapping for the token object class.
@@ -291,7 +291,12 @@ impl Token {
 
     /// The four privilege words.
     pub fn privileges(&self) -> Result<PrivilegeSet> {
-        let mut p = sys::peios_privilege_set { present: 0, enabled: 0, enabled_by_default: 0, used: 0 };
+        let mut p = sys::peios_privilege_set {
+            present: 0,
+            enabled: 0,
+            enabled_by_default: 0,
+            used: 0,
+        };
         // SAFETY: live fd; `p` writable.
         check(unsafe { sys::peios_token_privileges(self.raw(), &mut p) })?;
         Ok(PrivilegeSet {
@@ -315,7 +320,10 @@ impl Token {
     fn sid_array(&self, class: TokenClass) -> Result<Vec<(Sid, u32)>> {
         let blob = self.query(class)?;
         let view = SidArrayView::parse(&blob)?;
-        Ok(view.iter().map(|e| (e.sid.to_sid(), e.attributes)).collect())
+        Ok(view
+            .iter()
+            .map(|e| (e.sid.to_sid(), e.attributes))
+            .collect())
     }
 
     // ---- adjust / transform ----------------------------------------------
@@ -325,7 +333,10 @@ impl Token {
     pub fn adjust_privileges(&self, entries: &[PrivilegeAdjustment]) -> Result<Privileges> {
         let raw: Vec<sys::kacs_priv_entry> = entries
             .iter()
-            .map(|e| sys::kacs_priv_entry { luid: e.luid, attributes: e.attributes })
+            .map(|e| sys::kacs_priv_entry {
+                luid: e.luid,
+                attributes: e.attributes,
+            })
             .collect();
         let mut prev = 0u64;
         // SAFETY: live fd; `raw` lives for the call; `prev` writable.
@@ -426,9 +437,16 @@ impl Token {
     pub fn restrict(&self, spec: &RestrictSpec) -> Result<Token> {
         // Pointers below borrow `spec`'s buffers (and these temporaries), which
         // all outlive the synchronous call.
-        let sid_ptrs: Vec<*const c_void> =
-            spec.restrict_sids.iter().map(|s| s.as_bytes().as_ptr().cast()).collect();
-        let sid_lens: Vec<usize> = spec.restrict_sids.iter().map(|s| s.as_bytes().len()).collect();
+        let sid_ptrs: Vec<*const c_void> = spec
+            .restrict_sids
+            .iter()
+            .map(|s| s.as_bytes().as_ptr().cast())
+            .collect();
+        let sid_lens: Vec<usize> = spec
+            .restrict_sids
+            .iter()
+            .map(|s| s.as_bytes().len())
+            .collect();
         let raw = sys::peios_token_restrict {
             privs_to_delete: spec.privs_to_delete.bits(),
             deny_group_indices: spec.deny_group_indices.as_ptr(),
@@ -455,7 +473,10 @@ impl Token {
     pub fn adjust_groups(&self, entries: &[GroupAdjustment]) -> Result<GroupMask> {
         let raw: Vec<sys::kacs_group_entry> = entries
             .iter()
-            .map(|e| sys::kacs_group_entry { index: e.index, enable: e.enable as u32 })
+            .map(|e| sys::kacs_group_entry {
+                index: e.index,
+                enable: e.enable as u32,
+            })
             .collect();
         let mut prev = [0u64; GROUP_MASK_WORDS];
         // SAFETY: live fd; `raw` lives for the call; `prev` is the full
@@ -581,10 +602,18 @@ impl ClaimValues {
     /// bytes-backed variants point into `self`, which outlives the call.
     fn to_ffi(&self) -> Vec<sys::peios_token_claim_value> {
         fn scalar(s: u64) -> sys::peios_token_claim_value {
-            sys::peios_token_claim_value { scalar: s, bytes: core::ptr::null(), len: 0 }
+            sys::peios_token_claim_value {
+                scalar: s,
+                bytes: core::ptr::null(),
+                len: 0,
+            }
         }
         fn bytes(b: &[u8]) -> sys::peios_token_claim_value {
-            sys::peios_token_claim_value { scalar: 0, bytes: b.as_ptr().cast(), len: b.len() }
+            sys::peios_token_claim_value {
+                scalar: 0,
+                bytes: b.as_ptr().cast(),
+                len: b.len(),
+            }
         }
         match self {
             ClaimValues::Int64(v) => v.iter().map(|&x| scalar(x as u64)).collect(),
@@ -632,6 +661,32 @@ pub struct PrivilegeAdjustment {
     pub luid: u32,
     /// The new attribute bits.
     pub attributes: u32,
+}
+
+impl PrivilegeAdjustment {
+    /// Remove this privilege from the token's present/enabled/default sets.
+    pub fn remove(luid: u32) -> Self {
+        Self {
+            luid,
+            attributes: sys::KACS_PRIVILEGE_ATTR_REMOVED,
+        }
+    }
+
+    /// Enable this privilege if it is present on the token.
+    pub fn enable(luid: u32) -> Self {
+        Self {
+            luid,
+            attributes: sys::KACS_PRIVILEGE_ATTR_ENABLED,
+        }
+    }
+
+    /// Disable this privilege while leaving it present on the token.
+    pub fn disable(luid: u32) -> Self {
+        Self {
+            luid,
+            attributes: 0,
+        }
+    }
 }
 
 impl AsFd for Token {
@@ -835,7 +890,11 @@ impl TokenBuilder {
     pub fn supplementary_gids(&mut self, gids: &[u32]) -> &mut Self {
         // SAFETY: live builder; `gids` lives for the call.
         unsafe {
-            sys::peios_token_builder_supp_gids(self.raw, gids.as_ptr(), gids.len() as core::ffi::c_uint)
+            sys::peios_token_builder_supp_gids(
+                self.raw,
+                gids.as_ptr(),
+                gids.len() as core::ffi::c_uint,
+            )
         };
         self
     }
@@ -954,8 +1013,11 @@ impl TokenBuilder {
     /// Set the LCS registry credentials (replaces any prior set). A private-layer
     /// name with an interior NUL latches `EINVAL`.
     pub fn lcs_credentials(&mut self, creds: &LcsCredentials) -> &mut Self {
-        let layers: core::result::Result<Vec<CString>, _> =
-            creds.private_layers.iter().map(|s| CString::new(s.as_str())).collect();
+        let layers: core::result::Result<Vec<CString>, _> = creds
+            .private_layers
+            .iter()
+            .map(|s| CString::new(s.as_str()))
+            .collect();
         let layers = match layers {
             Ok(v) => v,
             Err(_) => {

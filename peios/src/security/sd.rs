@@ -85,7 +85,13 @@ impl SdBuilder {
     /// Set the DACL. An ACL with zero ACEs is a present-but-empty DACL.
     pub fn dacl(&mut self, acl: &Acl) -> &mut Self {
         // SAFETY: `raw` is live; `acl` bytes live for the call.
-        unsafe { sys::peios_sd_builder_dacl(self.raw, acl.as_bytes().as_ptr().cast(), acl.as_bytes().len()) };
+        unsafe {
+            sys::peios_sd_builder_dacl(
+                self.raw,
+                acl.as_bytes().as_ptr().cast(),
+                acl.as_bytes().len(),
+            )
+        };
         self
     }
 
@@ -100,7 +106,13 @@ impl SdBuilder {
     /// Set the SACL.
     pub fn sacl(&mut self, acl: &Acl) -> &mut Self {
         // SAFETY: `raw` is live; `acl` bytes live for the call.
-        unsafe { sys::peios_sd_builder_sacl(self.raw, acl.as_bytes().as_ptr().cast(), acl.as_bytes().len()) };
+        unsafe {
+            sys::peios_sd_builder_sacl(
+                self.raw,
+                acl.as_bytes().as_ptr().cast(),
+                acl.as_bytes().len(),
+            )
+        };
         self
     }
 
@@ -143,6 +155,13 @@ impl SecurityDescriptor {
         SecurityDescriptor(bytes)
     }
 
+    /// Validate raw self-relative security-descriptor bytes and wrap them in an
+    /// owned descriptor.
+    pub fn from_validated_bytes(bytes: Vec<u8>) -> Result<Self> {
+        SdView::parse(&bytes)?;
+        Ok(SecurityDescriptor(bytes))
+    }
+
     /// Borrow the raw SD bytes.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
@@ -169,7 +188,10 @@ impl<'a> SdView<'a> {
         // SAFETY: (ptr, len) from a live slice; `raw` is a writable out-view.
         let r = unsafe { sys::peios_sd_parse(sd.as_ptr().cast(), sd.len(), &mut raw) };
         crate::util::check(r)?;
-        Ok(SdView { raw, _buf: PhantomData })
+        Ok(SdView {
+            raw,
+            _buf: PhantomData,
+        })
     }
 
     /// The control bits.

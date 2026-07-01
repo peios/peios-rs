@@ -176,7 +176,9 @@ impl AclBuilder {
             sid: sid_p,
             sid_len: sid_n,
             object_type: ace.object_type.map_or(core::ptr::null(), |g| g.as_ptr()),
-            inherited_object_type: ace.inherited_object_type.map_or(core::ptr::null(), |g| g.as_ptr()),
+            inherited_object_type: ace
+                .inherited_object_type
+                .map_or(core::ptr::null(), |g| g.as_ptr()),
             app_data: app_p,
             app_data_len: app_n,
         };
@@ -245,11 +247,17 @@ impl<'a> AclView<'a> {
         // SAFETY: (ptr, len) from a live slice; `raw` is a writable out-view.
         let r = unsafe { sys::peios_acl_parse(acl.as_ptr().cast(), acl.len(), &mut raw) };
         crate::util::check(r)?;
-        Ok(AclView { raw, _buf: PhantomData })
+        Ok(AclView {
+            raw,
+            _buf: PhantomData,
+        })
     }
 
     pub(crate) fn from_raw(raw: sys::peios_acl_view) -> AclView<'a> {
-        AclView { raw, _buf: PhantomData }
+        AclView {
+            raw,
+            _buf: PhantomData,
+        }
     }
 
     /// The number of ACEs.
@@ -268,7 +276,10 @@ impl<'a> AclView<'a> {
         let mut raw = sys::peios_ace_view { _opaque: [0; 4] };
         // SAFETY: `self.raw` is populated; `raw` is a writable out-view.
         let r = unsafe { sys::peios_acl_view_ace(&self.raw, i as core::ffi::c_uint, &mut raw) };
-        (r == 0).then_some(AceView { raw, _buf: PhantomData })
+        (r == 0).then_some(AceView {
+            raw,
+            _buf: PhantomData,
+        })
     }
 
     /// Iterate over the ACEs in stored order.
@@ -375,6 +386,31 @@ pub struct SidAndAttributes<'a> {
     pub attributes: u32,
 }
 
+bitflags! {
+    /// SID attribute bits used in token group arrays.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct GroupAttributes: u32 {
+        /// Required group; cannot be disabled.
+        const MANDATORY = sys::KACS_SID_GROUP_MANDATORY;
+        /// Enabled by default when privileges/groups reset.
+        const ENABLED_BY_DEFAULT = sys::KACS_SID_GROUP_ENABLED_BY_DEFAULT;
+        /// Currently enabled for access checks.
+        const ENABLED = sys::KACS_SID_GROUP_ENABLED;
+        /// Eligible as an object owner.
+        const OWNER = sys::KACS_SID_GROUP_OWNER;
+        /// Deny-only group.
+        const USE_FOR_DENY_ONLY = sys::KACS_SID_GROUP_USE_FOR_DENY_ONLY;
+        /// Mandatory-integrity label.
+        const INTEGRITY = sys::KACS_SID_GROUP_INTEGRITY;
+        /// Enabled mandatory-integrity label.
+        const INTEGRITY_ENABLED = sys::KACS_SID_GROUP_INTEGRITY_ENABLED;
+        /// Resource SID.
+        const RESOURCE = sys::KACS_SID_GROUP_RESOURCE;
+        /// Kernel-injected logon SID.
+        const LOGON_ID = sys::KACS_SID_GROUP_LOGON_ID;
+    }
+}
+
 impl<'a> SidArrayView<'a> {
     /// Parse a SID-and-attributes blob.
     pub fn parse(blob: &'a [u8]) -> Result<SidArrayView<'a>> {
@@ -382,7 +418,10 @@ impl<'a> SidArrayView<'a> {
         // SAFETY: (ptr, len) from a live slice; `raw` is a writable out-view.
         let r = unsafe { sys::peios_sid_array_parse(blob.as_ptr().cast(), blob.len(), &mut raw) };
         crate::util::check(r)?;
-        Ok(SidArrayView { raw, _buf: PhantomData })
+        Ok(SidArrayView {
+            raw,
+            _buf: PhantomData,
+        })
     }
 
     /// The number of entries.
@@ -403,7 +442,13 @@ impl<'a> SidArrayView<'a> {
         let mut attrs = 0u32;
         // SAFETY: `raw` is populated; out-params are writable.
         let r = unsafe {
-            sys::peios_sid_array_get(&self.raw, i as core::ffi::c_uint, &mut p, &mut len, &mut attrs)
+            sys::peios_sid_array_get(
+                &self.raw,
+                i as core::ffi::c_uint,
+                &mut p,
+                &mut len,
+                &mut attrs,
+            )
         };
         if r != 0 || p.is_null() {
             return None;

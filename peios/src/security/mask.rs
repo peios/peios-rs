@@ -107,10 +107,26 @@ bitflags! {
 #[derive(Debug, Clone, Copy)]
 pub struct GenericMapping(pub(crate) sys::kacs_generic_mapping);
 
+impl PartialEq for GenericMapping {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.read == other.0.read
+            && self.0.write == other.0.write
+            && self.0.execute == other.0.execute
+            && self.0.all == other.0.all
+    }
+}
+
+impl Eq for GenericMapping {}
+
 impl GenericMapping {
     /// Build a mapping from the masks the four generic rights expand to.
     pub fn new(read: u32, write: u32, execute: u32, all: u32) -> Self {
-        GenericMapping(sys::kacs_generic_mapping { read, write, execute, all })
+        GenericMapping(sys::kacs_generic_mapping {
+            read,
+            write,
+            execute,
+            all,
+        })
     }
 
     pub(crate) fn from_raw(raw: sys::kacs_generic_mapping) -> Self {
