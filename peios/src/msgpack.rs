@@ -230,7 +230,10 @@ impl<'a> Reader<'a> {
         // SAFETY: `raw` is a writable reader; (ptr, len) from a live slice that
         // outlives the reader by the `'a` bound.
         unsafe { sys::peios_mp_reader_init(&mut raw, buf.as_ptr().cast(), buf.len()) };
-        Reader { raw, _buf: PhantomData }
+        Reader {
+            raw,
+            _buf: PhantomData,
+        }
     }
 
     /// The number of unconsumed bytes remaining in the buffer.
@@ -345,7 +348,9 @@ impl<'a> Reader<'a> {
         }
         // SAFETY: libpeios returned `len` bytes at `out` inside the buffer this
         // reader borrows ('a).
-        Ok((ty, unsafe { core::slice::from_raw_parts(out.cast::<u8>(), len) }))
+        Ok((ty, unsafe {
+            core::slice::from_raw_parts(out.cast::<u8>(), len)
+        }))
     }
 
     /// Skip exactly one complete value (descending into nested containers).

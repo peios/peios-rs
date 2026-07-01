@@ -30,7 +30,11 @@ fn acl_and_sd_builders_round_trip() {
 
     let mut b = AclBuilder::new();
     let acl: Acl = b
-        .allow(&everyone, AccessMask::GENERIC_READ.bits(), Default::default())
+        .allow(
+            &everyone,
+            AccessMask::GENERIC_READ.bits(),
+            Default::default(),
+        )
         .allow(&admins, AccessMask::GENERIC_ALL.bits(), Default::default())
         .build()
         .expect("serialize ACL");

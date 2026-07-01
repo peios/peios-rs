@@ -101,9 +101,7 @@ pub fn emit_batch(entries: &[EmitEntry<'_>]) -> Result<usize> {
     let mut emitted = 0u32;
     // SAFETY: `raw` borrows the live entry slices for the call; `emitted` is
     // writable and receives the count regardless of success or failure.
-    let r = unsafe {
-        sys::peios_event_emit_batch(raw.as_ptr(), raw.len() as u32, &mut emitted)
-    };
+    let r = unsafe { sys::peios_event_emit_batch(raw.as_ptr(), raw.len() as u32, &mut emitted) };
     if r == 0 {
         Ok(emitted as usize)
     } else {
@@ -152,19 +150,13 @@ impl<'a> Event<'a> {
         // SAFETY (caller contract): (ptr, len) name `event_type_len` bytes inside
         // the live ring mapping borrowed for 'a.
         let type_bytes = unsafe {
-            core::slice::from_raw_parts(
-                raw.event_type.cast::<u8>(),
-                raw.event_type_len as usize,
-            )
+            core::slice::from_raw_parts(raw.event_type.cast::<u8>(), raw.event_type_len as usize)
         };
         let event_type =
             core::str::from_utf8(type_bytes).map_err(|_| Error::from_raw_os_error(EINVAL))?;
         // SAFETY (caller contract): `payload_len` bytes inside the live mapping.
         let payload = unsafe {
-            core::slice::from_raw_parts(
-                raw.payload.cast::<u8>(),
-                raw.payload_len as usize,
-            )
+            core::slice::from_raw_parts(raw.payload.cast::<u8>(), raw.payload_len as usize)
         };
         Ok(Event {
             timestamp: raw.timestamp,
