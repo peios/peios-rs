@@ -242,11 +242,7 @@ impl<'a> OpenOptions<'a> {
 
     /// Open `path` relative to `dirfd` (`None` => the process cwd), returning
     /// the file handle and the [`OpenStatus`] of the open.
-    pub fn create(
-        &self,
-        dirfd: Option<BorrowedFd<'_>>,
-        path: &Path,
-    ) -> Result<(File, OpenStatus)> {
+    pub fn create(&self, dirfd: Option<BorrowedFd<'_>>, path: &Path) -> Result<(File, OpenStatus)> {
         let cpath = CString::new(path.as_os_str().as_bytes())
             .map_err(|_| Error::from_raw_os_error(EINVAL))?;
         let (sd_ptr, sd_len) = match self.sd {
@@ -268,7 +264,8 @@ impl<'a> OpenOptions<'a> {
         let fd = check_fd(unsafe {
             sys::peios_file_open(opt_fd(dirfd), cpath.as_ptr(), &params, &mut status)
         })?;
-        let status = OpenStatus::from_raw(status).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+        let status =
+            OpenStatus::from_raw(status).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
         Ok((File(fd), status))
     }
 
@@ -309,7 +306,12 @@ impl File {
         let bytes = sd.as_bytes();
         // SAFETY: live fd; `bytes` (ptr, len) from a live slice.
         check(unsafe {
-            sys::peios_fd_set_sd(self.raw(), secinfo.bits(), bytes.as_ptr().cast(), bytes.len())
+            sys::peios_fd_set_sd(
+                self.raw(),
+                secinfo.bits(),
+                bytes.as_ptr().cast(),
+                bytes.len(),
+            )
         })
     }
 
@@ -412,8 +414,8 @@ pub fn get_sd(
     secinfo: SecInfo,
     at_flags: i32,
 ) -> Result<SecurityDescriptor> {
-    let cpath = CString::new(path.as_os_str().as_bytes())
-        .map_err(|_| Error::from_raw_os_error(EINVAL))?;
+    let cpath =
+        CString::new(path.as_os_str().as_bytes()).map_err(|_| Error::from_raw_os_error(EINVAL))?;
     let bytes = probe(|buf, cap| {
         // SAFETY: live NUL-terminated path; (buf, cap) is the output window.
         unsafe {
@@ -439,8 +441,8 @@ pub fn set_sd(
     sd: &SecurityDescriptor,
     at_flags: i32,
 ) -> Result<()> {
-    let cpath = CString::new(path.as_os_str().as_bytes())
-        .map_err(|_| Error::from_raw_os_error(EINVAL))?;
+    let cpath =
+        CString::new(path.as_os_str().as_bytes()).map_err(|_| Error::from_raw_os_error(EINVAL))?;
     let bytes = sd.as_bytes();
     // SAFETY: live NUL-terminated path; `bytes` (ptr, len) from a live slice.
     check(unsafe {

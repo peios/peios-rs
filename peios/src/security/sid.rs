@@ -127,7 +127,8 @@ impl Sid {
     pub fn well_known(which: WellKnown) -> Sid {
         let mut buf = [0u8; Self::MAX_LEN];
         // SAFETY: output buffer sized for any SID; `which` is a valid enumerator.
-        let n = unsafe { sys::peios_sid_well_known(buf.as_mut_ptr().cast(), buf.len(), which.raw()) };
+        let n =
+            unsafe { sys::peios_sid_well_known(buf.as_mut_ptr().cast(), buf.len(), which.raw()) };
         Self::from_encoded(buf, n as usize).expect("well-known SID always encodes")
     }
 
@@ -135,7 +136,8 @@ impl Sid {
     pub fn integrity(level: IntegrityLevel) -> Sid {
         let mut buf = [0u8; Self::MAX_LEN];
         // SAFETY: output buffer sized for any SID.
-        let n = unsafe { sys::peios_sid_integrity(buf.as_mut_ptr().cast(), buf.len(), level.rid()) };
+        let n =
+            unsafe { sys::peios_sid_integrity(buf.as_mut_ptr().cast(), buf.len(), level.rid()) };
         Self::from_encoded(buf, n as usize).expect("integrity SID always encodes")
     }
 
@@ -152,12 +154,18 @@ impl Sid {
         let mut buf = [0u8; Self::MAX_LEN];
         let bytes = sid.as_bytes();
         buf[..bytes.len()].copy_from_slice(bytes);
-        Sid { buf, len: bytes.len() as u8 }
+        Sid {
+            buf,
+            len: bytes.len() as u8,
+        }
     }
 
     fn from_encoded(buf: [u8; Self::MAX_LEN], len: usize) -> Result<Sid> {
         debug_assert!(len <= Self::MAX_LEN);
-        Ok(Sid { buf, len: len as u8 })
+        Ok(Sid {
+            buf,
+            len: len as u8,
+        })
     }
 }
 
@@ -191,7 +199,8 @@ impl FromStr for Sid {
         let c = std::ffi::CString::new(s).map_err(|_| Error::from_raw_os_error(EINVAL))?;
         let mut buf = [0u8; Self::MAX_LEN];
         // SAFETY: output buffer sized for any SID; `c` is a valid C string.
-        let n = unsafe { sys::peios_sid_parse_string(buf.as_mut_ptr().cast(), buf.len(), c.as_ptr()) };
+        let n =
+            unsafe { sys::peios_sid_parse_string(buf.as_mut_ptr().cast(), buf.len(), c.as_ptr()) };
         Self::from_encoded(buf, crate::util::check_len(n)?)
     }
 }

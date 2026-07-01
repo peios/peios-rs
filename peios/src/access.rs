@@ -135,9 +135,7 @@ impl<'a> AccessCheck<'a> {
         let mut granted = 0u32;
         // SAFETY: `req` borrows live buffers (SD bytes, optional SID) for the
         // duration of the call; `granted` is a writable out-param; audit is NULL.
-        let r = unsafe {
-            sys::peios_access_check(&req, &mut granted, core::ptr::null_mut())
-        };
+        let r = unsafe { sys::peios_access_check(&req, &mut granted, core::ptr::null_mut()) };
         if r == 0 {
             return Ok(AccessDecision {
                 allowed: true,
@@ -174,14 +172,17 @@ impl<'a> AccessCheck<'a> {
     ) -> Result<Vec<sys::kacs_node_result>> {
         let count = object_tree.len() as u32;
         let req = self.build_request(object_tree.as_ptr(), count);
-        let mut results =
-            vec![sys::kacs_node_result { granted: 0, status: 0 }; object_tree.len()];
+        let mut results = vec![
+            sys::kacs_node_result {
+                granted: 0,
+                status: 0
+            };
+            object_tree.len()
+        ];
         // SAFETY: `req` borrows live buffers (SD bytes, optional SID, and the
         // `object_tree` slice of `count` entries) for the call; `results` is a
         // writable buffer of exactly `count` entries, matching `req.object_tree_count`.
-        let r = unsafe {
-            sys::peios_access_check_list(&req, results.as_mut_ptr(), count)
-        };
+        let r = unsafe { sys::peios_access_check_list(&req, results.as_mut_ptr(), count) };
         crate::util::check(r)?;
         Ok(results)
     }

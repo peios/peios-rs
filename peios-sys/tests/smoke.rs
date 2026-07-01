@@ -51,7 +51,10 @@ fn sid_well_known_round_trips() {
     assert_eq!(s, "S-1-5-18");
 
     // SAFETY: valid SID of `len` bytes.
-    assert_eq!(unsafe { sys::peios_sid_rid(sid.as_ptr() as *const c_void, len) }, 18);
+    assert_eq!(
+        unsafe { sys::peios_sid_rid(sid.as_ptr() as *const c_void, len) },
+        18
+    );
 }
 
 /// Exercise an opaque-handle lifecycle (new → mutate → bytes → free): a one-ACE
