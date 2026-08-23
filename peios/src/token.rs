@@ -38,7 +38,10 @@ bitflags! {
         const ADJUST_GROUPS = sys::KACS_TOKEN_ADJUST_GROUPS;
         /// Adjust the default DACL / owner / group.
         const ADJUST_DEFAULT = sys::KACS_TOKEN_ADJUST_DEFAULT;
-        /// Adjust the session id.
+        /// Adjust the token's interactive-environment scope.
+        const ADJUST_INTERACTIVITY_SCOPE = sys::KACS_TOKEN_ADJUST_SESSIONID;
+        /// Historical alias for [`Self::ADJUST_INTERACTIVITY_SCOPE`].
+        #[deprecated(note = "use ADJUST_INTERACTIVITY_SCOPE; this right does not change auth_id")]
         const ADJUST_SESSIONID = sys::KACS_TOKEN_ADJUST_SESSIONID;
         /// All token rights.
         const ALL_ACCESS = sys::KACS_TOKEN_ALL_ACCESS;
@@ -171,6 +174,10 @@ impl TokenClass {
     pub const CAPABILITIES: Self = Self(sys::KACS_TOKEN_CLASS_CAPABILITIES);
     /// The default-DACL class.
     pub const DEFAULT_DACL: Self = Self(sys::KACS_TOKEN_CLASS_DEFAULT_DACL);
+    /// The interactive-environment scope class (a `u32`, not `auth_id`).
+    pub const INTERACTIVITY_SCOPE: Self = Self(sys::KACS_TOKEN_CLASS_SESSION_ID);
+    /// The token-statistics class, including the LogonSession `auth_id`.
+    pub const STATISTICS: Self = Self(sys::KACS_TOKEN_CLASS_STATISTICS);
 }
 
 /// A token's four privilege words.
@@ -186,9 +193,44 @@ pub struct PrivilegeSet {
     pub used: Privileges,
 }
 
-/// A logon session id.
+/// A LogonSession LUID, also exposed on tokens as `auth_id`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SessionId(pub u64);
+
+/// A token's interactive-environment scope. Zero denotes a non-interactive
+/// service environment; this is independent of the token's [`SessionId`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct InteractivityScope(pub u32);
+
+/// Stable identifiers and lifecycle metadata from `TokenStatistics`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TokenStatistics {
+    /// Kernel-allocated token identifier.
+    pub token_id: u64,
+    /// LogonSession LUID associated with the token.
+    pub auth_id: SessionId,
+    /// Identifier bumped when mutable token state changes.
+    pub modified_id: u64,
+    /// Primary or impersonation token type.
+    pub token_type: TokenType,
+    /// Expiration timestamp, or zero when the token does not expire.
+    pub expiration: u64,
+}
+
+fn decode_token_statistics(raw: sys::peios_token_statistics) -> Result<TokenStatistics> {
+    if raw.reserved != 0 {
+        return Err(Error::from_raw_os_error(EINVAL));
+    }
+    let token_type =
+        TokenType::from_raw(raw.token_type).ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+    Ok(TokenStatistics {
+        token_id: raw.token_id,
+        auth_id: SessionId(raw.auth_id),
+        modified_id: raw.modified_id,
+        token_type,
+        expiration: raw.expiration,
+    })
+}
 
 /// An access token: an fd-backed KACS handle.
 #[derive(Debug)]
@@ -273,12 +315,40 @@ impl Token {
         TokenType::from_raw(out).ok_or_else(|| Error::from_raw_os_error(EINVAL))
     }
 
-    /// The session id.
-    pub fn session_id(&self) -> Result<SessionId> {
+    /// The token's interactive-environment scope.
+    pub fn interactivity_scope(&self) -> Result<InteractivityScope> {
         let mut out = 0u32;
         // SAFETY: live fd; `out` writable.
-        check(unsafe { sys::peios_token_session_id(self.raw(), &mut out) })?;
-        Ok(SessionId(out as u64))
+        check(unsafe { sys::peios_token_interactivity_scope(self.raw(), &mut out) })?;
+        Ok(InteractivityScope(out))
+    }
+
+    /// Historical compatibility accessor for the interactive-environment
+    /// scope. Despite its name, this does not return the LogonSession LUID.
+    #[deprecated(note = "use interactivity_scope(); use auth_id() for the LogonSession LUID")]
+    pub fn session_id(&self) -> Result<SessionId> {
+        self.interactivity_scope()
+            .map(|scope| SessionId(u64::from(scope.0)))
+    }
+
+    /// Token statistics, including the LogonSession LUID in `auth_id`.
+    pub fn statistics(&self) -> Result<TokenStatistics> {
+        let mut out = sys::peios_token_statistics {
+            token_id: 0,
+            auth_id: 0,
+            modified_id: 0,
+            token_type: 0,
+            reserved: 0,
+            expiration: 0,
+        };
+        // SAFETY: live fd; `out` is a writable fixed-size ABI result.
+        check(unsafe { sys::peios_token_statistics(self.raw(), &mut out) })?;
+        decode_token_statistics(out)
+    }
+
+    /// The LogonSession LUID associated with this token.
+    pub fn auth_id(&self) -> Result<SessionId> {
+        self.statistics().map(|statistics| statistics.auth_id)
     }
 
     /// The integrity level (the label SID's RID).
@@ -425,10 +495,18 @@ impl Token {
         check_fd(unsafe { sys::peios_token_get_linked(self.raw()) }).map(Token)
     }
 
-    /// Set the token's session id (`SeTcbPrivilege`).
-    pub fn set_session_id(&self, session: SessionId) -> Result<()> {
+    /// Set the token's interactive-environment scope (`SeTcbPrivilege`).
+    pub fn set_interactivity_scope(&self, scope: InteractivityScope) -> Result<()> {
         // SAFETY: live fd.
-        check(unsafe { sys::peios_token_set_session_id(self.raw(), session.0 as u32) })
+        check(unsafe { sys::peios_token_set_interactivity_scope(self.raw(), scope.0) })
+    }
+
+    /// Historical compatibility setter for the interactive-environment scope.
+    /// Values wider than the kernel's `u32` field are rejected, never truncated.
+    #[deprecated(note = "use set_interactivity_scope(); this does not change auth_id")]
+    pub fn set_session_id(&self, session: SessionId) -> Result<()> {
+        let scope = u32::try_from(session.0).map_err(|_| Error::from_raw_os_error(EINVAL))?;
+        self.set_interactivity_scope(InteractivityScope(scope))
     }
 
     /// Create a restricted (filtered) token: a copy with privileges deleted,
@@ -1085,6 +1163,64 @@ impl Drop for TokenBuilder {
     fn drop(&mut self) {
         // SAFETY: `raw` came from _new and is dropped exactly once.
         unsafe { sys::peios_token_builder_free(self.raw) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        decode_token_statistics, InteractivityScope, SessionId, TokenStatistics, TokenType,
+    };
+    use crate::error::Error;
+    use peios_sys as sys;
+
+    fn raw_statistics() -> sys::peios_token_statistics {
+        sys::peios_token_statistics {
+            token_id: 41,
+            auth_id: 999,
+            modified_id: 43,
+            token_type: sys::KACS_TOKEN_TYPE_PRIMARY,
+            reserved: 0,
+            expiration: 44,
+        }
+    }
+
+    #[test]
+    fn token_statistics_preserves_auth_id_independently_of_interactivity_scope() {
+        let statistics = decode_token_statistics(raw_statistics()).expect("statistics");
+
+        assert_eq!(
+            statistics,
+            TokenStatistics {
+                token_id: 41,
+                auth_id: SessionId(999),
+                modified_id: 43,
+                token_type: TokenType::Primary,
+                expiration: 44,
+            }
+        );
+        assert_ne!(statistics.auth_id.0, u64::from(InteractivityScope(0).0));
+    }
+
+    #[test]
+    fn token_statistics_rejects_reserved_data_and_unknown_token_types() {
+        let mut raw = raw_statistics();
+        raw.reserved = 1;
+        assert_eq!(
+            decode_token_statistics(raw)
+                .expect_err("reserved field")
+                .raw_os_error(),
+            Error::from_raw_os_error(libc::EINVAL).raw_os_error()
+        );
+
+        let mut raw = raw_statistics();
+        raw.token_type = u32::MAX;
+        assert_eq!(
+            decode_token_statistics(raw)
+                .expect_err("unknown token type")
+                .raw_os_error(),
+            Error::from_raw_os_error(libc::EINVAL).raw_os_error()
+        );
     }
 }
 

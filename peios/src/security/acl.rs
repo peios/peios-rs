@@ -11,6 +11,9 @@ use super::sid::{self, SidRef};
 use crate::error::{Error, Result};
 use crate::util::probe;
 
+/// `EINVAL`, for an ACL whose own view cannot produce an entry it counted.
+const EINVAL: i32 = 22;
+
 /// The type discriminant of an ACE.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AceType {
@@ -251,6 +254,43 @@ impl<'a> AclView<'a> {
             raw,
             _buf: PhantomData,
         })
+    }
+
+    /// Copy this ACL into an owned [`Acl`].
+    ///
+    /// The only way back from a *borrowed* ACL to an owned one. It exists
+    /// because an ACL read out of a parsed security descriptor — from SDDL, or
+    /// from `get_sd` — is a view over the descriptor's buffer, while everything
+    /// that *takes* an ACL (a token's default DACL, a builder's DACL) wants an
+    /// owned [`Acl`]. Nothing in the C ABI exposes the view's bytes, so this
+    /// rebuilds rather than copies.
+    ///
+    /// Rebuilding is lossless: [`AceView`] can read every field [`Ace`] can
+    /// write, `app_data` included — which is the one that matters, because that
+    /// is where a conditional ACE keeps its expression. An ACL round-tripped
+    /// through here keeps its conditions.
+    pub fn to_acl(&self) -> Result<Acl> {
+        let mut builder = AclBuilder::new();
+        for index in 0..self.len() {
+            // Both of these are structurally impossible on a view that parsed:
+            // the count came from the same view, and every ACE type KACS
+            // defines carries a trustee. Refuse rather than skip — silently
+            // dropping an entry from an ACL changes who can reach what.
+            let ace = self
+                .ace(index)
+                .ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+            let sid = ace.sid().ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+            builder.add(&Ace {
+                ace_type: ace.ace_type(),
+                flags: ace.flags(),
+                mask: ace.mask(),
+                sid,
+                object_type: ace.object_type(),
+                inherited_object_type: ace.inherited_object_type(),
+                app_data: ace.app_data(),
+            });
+        }
+        builder.build()
     }
 
     pub(crate) fn from_raw(raw: sys::peios_acl_view) -> AclView<'a> {

@@ -16,6 +16,7 @@ use std::ffi::CString;
 use peios_sys as sys;
 
 use super::SecurityDescriptor;
+use super::acl::Acl;
 use crate::error::{Error, Result};
 use crate::file::SecInfo;
 use crate::util::{probe, probe_str};
@@ -29,6 +30,33 @@ pub fn parse(sddl: &str) -> Result<SecurityDescriptor> {
     let c = CString::new(sddl).map_err(|_| Error::from_raw_os_error(EINVAL))?;
     let bytes = probe(|buf, cap| unsafe { sys::peios_sddl_parse_sd(buf, cap, c.as_ptr()) })?;
     Ok(SecurityDescriptor::from_bytes(bytes))
+}
+
+/// Parse the DACL out of an SDDL string, as an owned ACL.
+///
+/// For the places that want an ACL rather than a whole descriptor — a token's
+/// default DACL is the motivating one. `"D:(A;;GA;;;SY)(A;;GA;;;BA)"` is the
+/// usual shape, but any SDDL carrying a `D:` section works, so a full
+/// descriptor can be handed over and only its DACL taken.
+///
+/// A convenience over [`parse`] plus [`AclView::to_acl`], and worth having as
+/// one call because the intermediate descriptor has to outlive the view taken
+/// from it — a borrow the caller would otherwise have to arrange itself, and
+/// get wrong once.
+///
+/// # Errors
+///
+/// `EINVAL` if the string does not parse, or if it carries no DACL at all.
+/// **An absent DACL is refused rather than treated as empty**, because in a
+/// security descriptor those mean opposite things: no DACL grants everyone
+/// everything, an empty DACL grants nobody anything. Guessing which was meant
+/// is not this function's to do.
+pub fn parse_acl(sddl: &str) -> Result<Acl> {
+    let sd = parse(sddl)?;
+    let view = sd.view()?;
+    view.dacl()
+        .ok_or_else(|| Error::from_raw_os_error(EINVAL))?
+        .to_acl()
 }
 
 /// Render a self-relative security descriptor's wire bytes as an SDDL string.
@@ -120,5 +148,72 @@ mod tests {
     #[test]
     fn bad_sddl_is_an_error() {
         assert!(parse("not valid sddl").is_err());
+    }
+
+    #[test]
+    fn a_dacl_only_string_parses_to_an_acl() {
+        let acl = parse_acl("D:(A;;GA;;;SY)(A;;GA;;;BA)").expect("a DACL");
+        assert_eq!(acl.view().expect("a parseable ACL").len(), 2);
+    }
+
+    /// A whole descriptor is accepted; only its DACL comes back.
+    #[test]
+    fn a_full_descriptor_yields_only_its_dacl() {
+        let acl = parse_acl("O:SYG:SYD:(A;;GA;;;SY)").expect("a DACL");
+        assert_eq!(acl.view().expect("a parseable ACL").len(), 1);
+    }
+
+    /// The case `to_acl` exists to get right. A conditional ACE keeps its
+    /// expression in the ACE's application data, so a rebuild that dropped
+    /// `app_data` would turn "Engineering may write" into "anyone may write" —
+    /// silently, and in the direction that grants more.
+    #[test]
+    fn a_conditional_ace_keeps_its_condition_through_the_round_trip() {
+        let sddl = "D:(XA;;GA;;;WD;(@USER.Department == \"Engineering\"))";
+        let acl = parse_acl(sddl).expect("a conditional DACL");
+        let view = acl.view().expect("a parseable ACL");
+        let ace = view.ace(0).expect("one ACE");
+
+        let condition = ace
+            .app_data()
+            .expect("the condition must survive the rebuild");
+        assert!(
+            condition.starts_with(b"artx"),
+            "application data must still be the ARTX bytecode, got {condition:?}"
+        );
+        assert_eq!(
+            super::format_condition(condition).expect("a formattable condition"),
+            "@User.Department == \"Engineering\""
+        );
+    }
+
+    /// Every field an ACE carries has to survive, not just the ones a simple
+    /// allow-ACE uses.
+    #[test]
+    fn flags_and_masks_survive_the_round_trip() {
+        let acl = parse_acl("D:(A;OICI;GA;;;BA)(D;;GR;;;WD)").expect("a DACL");
+        let view = acl.view().expect("a parseable ACL");
+
+        let allow = view.ace(0).expect("the allow ACE");
+        assert_eq!(allow.mask(), crate::security::AccessMask::GENERIC_ALL.bits());
+        assert!(allow.flags().contains(crate::security::AceFlags::OBJECT_INHERIT));
+        assert!(allow.flags().contains(crate::security::AceFlags::CONTAINER_INHERIT));
+
+        let deny = view.ace(1).expect("the deny ACE");
+        assert_eq!(deny.mask(), crate::security::AccessMask::GENERIC_READ.bits());
+    }
+
+    /// No DACL and an empty DACL mean opposite things — grant everyone
+    /// everything, versus grant nobody anything — so an absent one must not be
+    /// quietly turned into an empty one.
+    #[test]
+    fn a_descriptor_with_no_dacl_is_refused_rather_than_read_as_empty() {
+        assert!(parse_acl("O:SYG:SY").is_err());
+    }
+
+    #[test]
+    fn an_empty_dacl_is_an_acl_with_no_entries() {
+        let acl = parse_acl("D:").expect("an empty DACL is still a DACL");
+        assert_eq!(acl.view().expect("a parseable ACL").len(), 0);
     }
 }
