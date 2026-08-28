@@ -153,6 +153,37 @@ impl ImpersonationLevel {
             ImpersonationLevel::Delegation => sys::KACS_IMLEVEL_DELEGATION as u8,
         }
     }
+
+    fn from_raw(raw: u32) -> Option<Self> {
+        match raw {
+            x if x == sys::KACS_IMLEVEL_ANONYMOUS => Some(ImpersonationLevel::Anonymous),
+            x if x == sys::KACS_IMLEVEL_IDENTIFICATION => Some(ImpersonationLevel::Identification),
+            x if x == sys::KACS_IMLEVEL_IMPERSONATION => Some(ImpersonationLevel::Impersonation),
+            x if x == sys::KACS_IMLEVEL_DELEGATION => Some(ImpersonationLevel::Delegation),
+            _ => None,
+        }
+    }
+
+    /// Bound how far this socket's identity may travel when the peer captures
+    /// it — the `KACS_SO_IMPERSONATION_LEVEL` socket option. A client sets it
+    /// before `connect()`; the default is [`ImpersonationLevel::Impersonation`],
+    /// and the kernel refuses the change with `EISCONN` once the socket is
+    /// connected.
+    pub fn set_on_socket(self, sock: BorrowedFd<'_>) -> Result<()> {
+        // SAFETY: `sock` is live for the call.
+        check(unsafe {
+            sys::peios_socket_set_impersonation_level(sock.as_raw_fd(), self.to_raw() as u32)
+        })
+    }
+
+    /// Read the level set on `sock` (the `KACS_SO_IMPERSONATION_LEVEL` socket
+    /// option).
+    pub fn of_socket(sock: BorrowedFd<'_>) -> Result<Self> {
+        let mut raw: u32 = 0;
+        // SAFETY: `sock` is live for the call; `raw` is a valid out-pointer.
+        check(unsafe { sys::peios_socket_get_impersonation_level(sock.as_raw_fd(), &mut raw) })?;
+        Self::from_raw(raw).ok_or_else(|| crate::Error::from_raw_os_error(libc::EINVAL))
+    }
 }
 
 /// A token information class, for the generic [`Token::query`].
@@ -261,10 +292,23 @@ impl Token {
     }
 
     /// The peer-identity token captured at `connect()` on a connected Unix
-    /// stream/seqpacket socket.
+    /// stream/seqpacket socket — the `KACS_SO_PEER_TOKEN` socket option. The
+    /// fd carries fixed `TOKEN_QUERY | TOKEN_IMPERSONATE` rights. Fails with
+    /// `ENOTCONN` on an unconnected socket, `ENODATA` on a connected socket
+    /// that carries no captured identity (a `socketpair` end), and
+    /// `EOPNOTSUPP` on a socket KACS captures no identity for.
     pub fn open_peer(conn: BorrowedFd<'_>) -> Result<Token> {
         // SAFETY: `conn` is live for the call.
         check_fd(unsafe { sys::peios_token_open_peer(conn.as_raw_fd()) }).map(Token)
+    }
+
+    /// Impersonate the peer of `conn` on the calling thread: open the peer
+    /// token, install it, and close it. The fused form of [`Token::open_peer`]
+    /// followed by [`Token::impersonate`], for a handler that impersonates,
+    /// works, and reverts on one thread. Revert with [`Token::revert`].
+    pub fn impersonate_peer(conn: BorrowedFd<'_>) -> Result<()> {
+        // SAFETY: `conn` is live for the call.
+        check(unsafe { sys::peios_token_impersonate_peer(conn.as_raw_fd()) })
     }
 
     /// Mint a token from a pre-built token-spec buffer (prefer [`TokenBuilder`]).
