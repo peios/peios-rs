@@ -186,6 +186,17 @@ impl ImpersonationLevel {
         check(unsafe { sys::peios_socket_set_pass_token(sock.as_raw_fd(), on) })
     }
 
+    /// Replace a listening socket's conveyed identity with the caller's own
+    /// effective identity (the `KACS_SO_RESTAMP` socket option). A listener
+    /// conveys the identity captured at `listen()` to every client that
+    /// connects; a process that receives a listener it did not create — from
+    /// the descriptor store after a restart, or from a broker — restamps it so
+    /// clients see the process actually accepting. Self-gated.
+    pub fn restamp_listener(sock: BorrowedFd<'_>) -> Result<()> {
+        // SAFETY: `sock` is live for the call.
+        check(unsafe { sys::peios_socket_restamp(sock.as_raw_fd()) })
+    }
+
     /// Read the level set on `sock` (the `KACS_SO_IMPERSONATION_LEVEL` socket
     /// option).
     pub fn of_socket(sock: BorrowedFd<'_>) -> Result<Self> {
@@ -301,9 +312,13 @@ impl Token {
             .map(Token)
     }
 
-    /// The peer-identity token captured at `connect()` on a connected Unix
-    /// stream/seqpacket socket — the `KACS_SO_PEER_TOKEN` socket option. The
-    /// fd carries fixed `TOKEN_QUERY | TOKEN_IMPERSONATE` rights. Fails with
+    /// The peer identity on a connected Unix stream/seqpacket socket — the
+    /// `KACS_SO_PEER_TOKEN` socket option: the conveyed-identity register,
+    /// which starts as the identity captured at `connect()` (the client's on an
+    /// accepted socket; the listener's, at Identification level by default, on
+    /// the connecting socket) and follows each `KACS_SCM_TOKEN` the reader
+    /// consumes. The fd carries fixed `TOKEN_QUERY | TOKEN_IMPERSONATE`
+    /// rights. Fails with
     /// `ENOTCONN` on an unconnected socket, `ENODATA` on a connected socket
     /// that carries no captured identity (a `socketpair` end), and
     /// `EOPNOTSUPP` on a socket KACS captures no identity for.
