@@ -11,7 +11,8 @@
 //! success output ([`OpenStatus`]) returned alongside the handle, never an error.
 //!
 //! [`get_sd`] / [`set_sd`] read and write a file's security descriptor by path;
-//! [`File::fd_get_sd`] / [`File::fd_set_sd`] do so by fd. The mount-policy calls
+//! [`File::fd_get_sd`] / [`File::fd_set_sd`] do so by fd, and [`sysv_get_sd`] /
+//! [`sysv_set_sd`] by System V IPC kind and id. The mount-policy calls
 //! ([`File::mount_get_policy`] / [`File::mount_set_policy`]) govern how a
 //! superblock without native SD storage is treated.
 
@@ -453,6 +454,53 @@ pub fn set_sd(
             bytes.as_ptr().cast(),
             bytes.len(),
             at_flags as u32,
+        )
+    })
+}
+
+/// Which kind of System V IPC object a [`sysv_get_sd`] / [`sysv_set_sd`] call
+/// addresses. SysV objects have no fd and no path: they are named by kind and
+/// the id that `shmget` / `msgget` / `semget` returned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u32)]
+pub enum SysvKind {
+    /// A shared memory segment (`shmget`).
+    SharedMemory = sys::KACS_SD_AT_SYSV_SHM,
+    /// A message queue (`msgget`).
+    MessageQueue = sys::KACS_SD_AT_SYSV_MSG,
+    /// A semaphore array (`semget`).
+    SemaphoreArray = sys::KACS_SD_AT_SYSV_SEM,
+}
+
+/// Read the security descriptor of a System V IPC object by kind and id. The
+/// object is looked up in the caller's IPC namespace (`EINVAL` unknown, `EIDRM`
+/// removed) and the requested components need `READ_CONTROL` /
+/// `ACCESS_SYSTEM_SECURITY` on its descriptor.
+pub fn sysv_get_sd(kind: SysvKind, id: i32, secinfo: SecInfo) -> Result<SecurityDescriptor> {
+    let bytes = probe(|buf, cap| {
+        // SAFETY: (buf, cap) is the getxattr-style output window.
+        unsafe { sys::peios_sysv_get_sd(kind as u32, id, secinfo.bits(), buf, cap) }
+    })?;
+    Ok(SecurityDescriptor::from_bytes(bytes))
+}
+
+/// Write the `secinfo` components of `sd` onto a System V IPC object,
+/// preserving the rest (`WRITE_DAC` / `WRITE_OWNER` on its descriptor).
+pub fn sysv_set_sd(
+    kind: SysvKind,
+    id: i32,
+    secinfo: SecInfo,
+    sd: &SecurityDescriptor,
+) -> Result<()> {
+    let bytes = sd.as_bytes();
+    // SAFETY: `bytes` (ptr, len) from a live slice.
+    check(unsafe {
+        sys::peios_sysv_set_sd(
+            kind as u32,
+            id,
+            secinfo.bits(),
+            bytes.as_ptr().cast(),
+            bytes.len(),
         )
     })
 }
