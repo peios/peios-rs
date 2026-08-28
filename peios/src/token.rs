@@ -176,6 +176,16 @@ impl ImpersonationLevel {
         })
     }
 
+    /// Sender-side automation (the `KACS_SO_PASS_TOKEN` socket option): while
+    /// on, every send from `sock` carries the sender's effective identity as a
+    /// `KACS_SCM_TOKEN`, derived at the socket's level, so the peer's register
+    /// follows whoever is impersonating at each send. Changes nothing about
+    /// trust — a sender can always attest to what it is.
+    pub fn set_pass_token(sock: BorrowedFd<'_>, on: bool) -> Result<()> {
+        // SAFETY: `sock` is live for the call.
+        check(unsafe { sys::peios_socket_set_pass_token(sock.as_raw_fd(), on) })
+    }
+
     /// Read the level set on `sock` (the `KACS_SO_IMPERSONATION_LEVEL` socket
     /// option).
     pub fn of_socket(sock: BorrowedFd<'_>) -> Result<Self> {
