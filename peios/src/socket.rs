@@ -98,7 +98,7 @@ pub fn recv_message(
     // From here every fd libpeios handed us is ours to own.
     let token = if msg.token_fd >= 0 {
         // SAFETY: a fresh O_CLOEXEC token fd delivered to this call alone.
-        Some(unsafe { Token::from_owned(OwnedFd::from_raw_fd(msg.token_fd as RawFd)) })
+        Some(Token::from(unsafe { OwnedFd::from_raw_fd(msg.token_fd as RawFd) }))
     } else {
         None
     };

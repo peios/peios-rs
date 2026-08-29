@@ -353,12 +353,6 @@ impl Token {
         GenericMapping::from_raw(unsafe { sys::peios_token_generic_mapping })
     }
 
-    /// Wrap a token fd this crate already owns (one libpeios handed back
-    /// inside a received message).
-    pub(crate) fn from_owned(fd: OwnedFd) -> Token {
-        Token(fd)
-    }
-
     fn raw(&self) -> RawFd {
         self.0.as_raw_fd()
     }
