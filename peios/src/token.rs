@@ -131,7 +131,10 @@ impl TokenType {
     }
 }
 
-/// The impersonation level of an impersonation token.
+/// The impersonation level: a ceiling every token carries on what may be
+/// derived from it. An impersonation token acts at this level; a primary
+/// token bounds everything captured from, conveyed by, or duplicated out of
+/// the process carrying it. It only ever goes down (Kernel TRM §3.5.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ImpersonationLevel {
     /// Anonymous — the server cannot identify the client.
@@ -317,7 +320,7 @@ impl Token {
     /// which starts as the identity captured at `connect()` (the client's on an
     /// accepted socket; the listener's, at Identification level by default, on
     /// the connecting socket) and follows each `KACS_SCM_TOKEN` the reader
-    /// consumes. The fd carries fixed `TOKEN_QUERY | TOKEN_IMPERSONATE`
+    /// consumes. The fd carries fixed `TOKEN_QUERY | TOKEN_IMPERSONATE | TOKEN_DUPLICATE`
     /// rights. Fails with
     /// `ENOTCONN` on an unconnected socket, `ENODATA` on a connected socket
     /// that carries no captured identity (a `socketpair` end), and
@@ -971,6 +974,11 @@ impl TokenBuilder {
     }
 
     /// Set the token type and impersonation level.
+    ///
+    /// The level is meaningful on a primary too: it is the ceiling on
+    /// everything derived from the token, so a logon or service token is
+    /// minted at [`ImpersonationLevel::Delegation`]. The kernel currently
+    /// refuses a primary below [`ImpersonationLevel::Impersonation`].
     pub fn token_type(&mut self, ty: TokenType, imp_level: ImpersonationLevel) -> &mut Self {
         // SAFETY: live builder.
         unsafe { sys::peios_token_builder_type(self.raw, ty.to_raw(), imp_level.to_raw()) };
