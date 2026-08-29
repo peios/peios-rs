@@ -157,7 +157,7 @@ impl ImpersonationLevel {
         }
     }
 
-    fn from_raw(raw: u32) -> Option<Self> {
+    pub(crate) fn from_raw(raw: u32) -> Option<Self> {
         match raw {
             x if x == sys::KACS_IMLEVEL_ANONYMOUS => Some(ImpersonationLevel::Anonymous),
             x if x == sys::KACS_IMLEVEL_IDENTIFICATION => Some(ImpersonationLevel::Identification),
@@ -353,6 +353,12 @@ impl Token {
         GenericMapping::from_raw(unsafe { sys::peios_token_generic_mapping })
     }
 
+    /// Wrap a token fd this crate already owns (one libpeios handed back
+    /// inside a received message).
+    pub(crate) fn from_owned(fd: OwnedFd) -> Token {
+        Token(fd)
+    }
+
     fn raw(&self) -> RawFd {
         self.0.as_raw_fd()
     }
@@ -385,6 +391,16 @@ impl Token {
         // SAFETY: live fd; `out` writable.
         check(unsafe { sys::peios_token_type(self.raw(), &mut out) })?;
         TokenType::from_raw(out).ok_or_else(|| Error::from_raw_os_error(EINVAL))
+    }
+
+    /// The token's impersonation level: the ceiling on what may be derived
+    /// from it, on a primary token as much as an impersonation one (Kernel
+    /// TRM §3.5.1).
+    pub fn impersonation_level(&self) -> Result<ImpersonationLevel> {
+        let mut out = 0u32;
+        // SAFETY: live fd; `out` writable.
+        check(unsafe { sys::peios_token_impersonation_level(self.raw(), &mut out) })?;
+        ImpersonationLevel::from_raw(out).ok_or_else(|| Error::from_raw_os_error(EINVAL))
     }
 
     /// The token's interactive-environment scope.
