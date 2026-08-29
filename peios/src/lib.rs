@@ -19,6 +19,8 @@
 //! - [`access`] — KACS access checks.
 //! - [`file`](mod@file) — native KACS file open and security-descriptor I/O.
 //! - [`process`] — process-security (mitigation) controls.
+//! - [`socket`] — per-message identity and descriptors on Unix sockets, and
+//!   the peer's process handle.
 //! - [`event`] — KMES event emission and consumption.
 //! - [`msgpack`] — the MessagePack codec for event payloads.
 //! - [`registry`] — LCS, the layered configuration registry.
@@ -41,6 +43,7 @@ pub mod msgpack;
 pub mod process;
 pub mod registry;
 pub mod security;
+pub mod socket;
 pub mod token;
 
 pub use error::{Error, Result};
