@@ -108,13 +108,9 @@ bitflags! {
         const IMPERSONATE = sys::KACS_SE_IMPERSONATE_PRIVILEGE as u64;
         /// `SeCreateSymbolicLinkPrivilege`.
         const CREATE_SYMBOLIC_LINK = sys::KACS_SE_CREATE_SYMBOLIC_LINK_PRIVILEGE;
-        /// `SeBindPrivilegedPortPrivilege` — bind below the reserved port floor.
-        ///
-        /// The cast is load-bearing: this is the only privilege at bit 63, and
-        /// `1ULL << 63` exceeds `i64::MAX`, so bindgen types it `i64` where the
-        /// rest come through unsigned. `as u64` reinterprets the bit pattern,
-        /// which is the value the header wrote — asserted in the tests below.
-        const BIND_PRIVILEGED_PORT = sys::KACS_SE_BIND_PRIVILEGED_PORT_PRIVILEGE as u64;
+        // Bit 63 was `SeBindPrivilegedPortPrivilege`, retired when port
+        // reservations (`<pkm/net.h>`) made binding a port an SD decision.
+        // The bit is not reused.
     }
 }
 
@@ -156,7 +152,6 @@ const NAMES: &[(&str, Privileges)] = &[
     ("SeManageVolumePrivilege", Privileges::MANAGE_VOLUME),
     ("SeImpersonatePrivilege", Privileges::IMPERSONATE),
     ("SeCreateSymbolicLinkPrivilege", Privileges::CREATE_SYMBOLIC_LINK),
-    ("SeBindPrivilegedPortPrivilege", Privileges::BIND_PRIVILEGED_PORT),
 ];
 
 impl Privileges {
@@ -308,15 +303,12 @@ mod tests {
         assert_eq!(Privileges::INCREASE_QUOTA.bits(), 1 << 5);
     }
 
-    /// The one privilege whose constant crosses the signed boundary, so the
-    /// `as u64` cast on it is checked rather than assumed.
+    /// Bit 63 was retired with `SeBindPrivilegedPortPrivilege` and must not
+    /// quietly come back under another name.
     #[test]
-    fn the_top_bit_privilege_survives_the_signed_crossing() {
-        assert_eq!(Privileges::BIND_PRIVILEGED_PORT.bits(), 1u64 << 63);
-        assert_eq!(
-            Privileges::parse_name("SeBindPrivilegedPortPrivilege"),
-            Some(Privileges::BIND_PRIVILEGED_PORT)
-        );
+    fn the_retired_top_bit_is_unnamed() {
+        assert!(!Privileges::all().contains(Privileges::from_bits_retain(1u64 << 63)));
+        assert_eq!(Privileges::parse_name("SeBindPrivilegedPortPrivilege"), None);
     }
 
     #[test]
