@@ -478,13 +478,17 @@ pub fn fd_get_sd(fd: BorrowedFd<'_>, secinfo: SecInfo) -> Result<SecurityDescrip
 /// borrowing rather than owning it. A free function for the same reason as
 /// [`fd_get_sd`].
 ///
-/// This is the call that closes the window a pathname socket otherwise carries:
-/// [`set_sd`] can only address the socket after `bind` has already published it
-/// under the parent directory's inherited descriptor, whereas this stamps the
-/// descriptor the kernel created at `bind` before anything can reach it. That
-/// distinction only matters when the inherited descriptor is not strictly
-/// narrower than the one being installed — but a datagram socket is live the
-/// instant `bind` returns, with no `listen` to hold it back.
+/// # Not usable on a socket
+///
+/// This is the path syscall with the target as `dirfd`, an empty path and
+/// `AT_EMPTY_PATH` (see the module docs), and the kernel answers `EOPNOTSUPP`
+/// for a socket fd. A pathname socket must be stamped through [`set_sd`]
+/// instead, after `bind` has published it. Tried on peinit's notification
+/// socket, and it took PID 1 into recovery.
+///
+/// What this is for is an fd that names a file or directory and that the caller
+/// intends to keep — where [`File::fd_set_sd`] would work but owning the
+/// descriptor is not acceptable.
 pub fn fd_set_sd(fd: BorrowedFd<'_>, secinfo: SecInfo, sd: &SecurityDescriptor) -> Result<()> {
     let bytes = sd.as_bytes();
     // SAFETY: live borrowed fd; `bytes` (ptr, len) from a live slice.

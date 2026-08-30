@@ -15,8 +15,8 @@ use std::ffi::CString;
 
 use peios_sys as sys;
 
-use super::SecurityDescriptor;
 use super::acl::Acl;
+use super::SecurityDescriptor;
 use crate::error::{Error, Result};
 use crate::file::SecInfo;
 use crate::util::{probe, probe_str};
@@ -195,12 +195,22 @@ mod tests {
         let view = acl.view().expect("a parseable ACL");
 
         let allow = view.ace(0).expect("the allow ACE");
-        assert_eq!(allow.mask(), crate::security::AccessMask::GENERIC_ALL.bits());
-        assert!(allow.flags().contains(crate::security::AceFlags::OBJECT_INHERIT));
-        assert!(allow.flags().contains(crate::security::AceFlags::CONTAINER_INHERIT));
+        assert_eq!(
+            allow.mask(),
+            crate::security::AccessMask::GENERIC_ALL.bits()
+        );
+        assert!(allow
+            .flags()
+            .contains(crate::security::AceFlags::OBJECT_INHERIT));
+        assert!(allow
+            .flags()
+            .contains(crate::security::AceFlags::CONTAINER_INHERIT));
 
         let deny = view.ace(1).expect("the deny ACE");
-        assert_eq!(deny.mask(), crate::security::AccessMask::GENERIC_READ.bits());
+        assert_eq!(
+            deny.mask(),
+            crate::security::AccessMask::GENERIC_READ.bits()
+        );
     }
 
     /// No DACL and an empty DACL mean opposite things — grant everyone

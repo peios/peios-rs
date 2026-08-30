@@ -48,8 +48,8 @@ pub fn send_message(
     flags: i32,
 ) -> Result<usize> {
     let raw_fds: Vec<i32> = fds.iter().map(|fd| fd.as_raw_fd()).collect();
-    let fd_count = u32::try_from(raw_fds.len())
-        .map_err(|_| crate::Error::from_raw_os_error(libc::EINVAL))?;
+    let fd_count =
+        u32::try_from(raw_fds.len()).map_err(|_| crate::Error::from_raw_os_error(libc::EINVAL))?;
     // SAFETY: every fd is live for the call; (ptr, len) come from live slices.
     let n = unsafe {
         sys::peios_socket_send_message(
@@ -75,7 +75,8 @@ pub fn recv_message(
     flags: i32,
 ) -> Result<ReceivedMessage> {
     let mut raw_fds: Vec<i32> = vec![-1; max_fds];
-    let fd_cap = u32::try_from(max_fds).map_err(|_| crate::Error::from_raw_os_error(libc::EINVAL))?;
+    let fd_cap =
+        u32::try_from(max_fds).map_err(|_| crate::Error::from_raw_os_error(libc::EINVAL))?;
     let mut msg = sys::peios_socket_message {
         token_fd: -1,
         fds: raw_fds.as_mut_ptr(),
@@ -98,7 +99,9 @@ pub fn recv_message(
     // From here every fd libpeios handed us is ours to own.
     let token = if msg.token_fd >= 0 {
         // SAFETY: a fresh O_CLOEXEC token fd delivered to this call alone.
-        Some(Token::from(unsafe { OwnedFd::from_raw_fd(msg.token_fd as RawFd) }))
+        Some(Token::from(unsafe {
+            OwnedFd::from_raw_fd(msg.token_fd as RawFd)
+        }))
     } else {
         None
     };

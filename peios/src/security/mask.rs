@@ -127,7 +127,10 @@ bitflags! {
 /// by side.
 const NAMES: &[(&str, Privileges)] = &[
     ("SeCreateTokenPrivilege", Privileges::CREATE_TOKEN),
-    ("SeAssignPrimaryTokenPrivilege", Privileges::ASSIGN_PRIMARY_TOKEN),
+    (
+        "SeAssignPrimaryTokenPrivilege",
+        Privileges::ASSIGN_PRIMARY_TOKEN,
+    ),
     ("SeLockMemoryPrivilege", Privileges::LOCK_MEMORY),
     ("SeIncreaseQuotaPrivilege", Privileges::INCREASE_QUOTA),
     ("SeTcbPrivilege", Privileges::TCB),
@@ -151,7 +154,10 @@ const NAMES: &[(&str, Privileges)] = &[
     ("SeRemoteShutdownPrivilege", Privileges::REMOTE_SHUTDOWN),
     ("SeManageVolumePrivilege", Privileges::MANAGE_VOLUME),
     ("SeImpersonatePrivilege", Privileges::IMPERSONATE),
-    ("SeCreateSymbolicLinkPrivilege", Privileges::CREATE_SYMBOLIC_LINK),
+    (
+        "SeCreateSymbolicLinkPrivilege",
+        Privileges::CREATE_SYMBOLIC_LINK,
+    ),
 ];
 
 impl Privileges {
@@ -308,7 +314,10 @@ mod tests {
     #[test]
     fn the_retired_top_bit_is_unnamed() {
         assert!(!Privileges::all().contains(Privileges::from_bits_retain(1u64 << 63)));
-        assert_eq!(Privileges::parse_name("SeBindPrivilegedPortPrivilege"), None);
+        assert_eq!(
+            Privileges::parse_name("SeBindPrivilegedPortPrivilege"),
+            None
+        );
     }
 
     #[test]
@@ -350,7 +359,10 @@ mod tests {
     #[test]
     fn a_set_of_privileges_has_no_single_name() {
         assert_eq!(Privileges::empty().canonical_name(), None);
-        assert_eq!((Privileges::TCB | Privileges::BACKUP).canonical_name(), None);
+        assert_eq!(
+            (Privileges::TCB | Privileges::BACKUP).canonical_name(),
+            None
+        );
     }
 
     #[test]
@@ -359,7 +371,11 @@ mod tests {
         let named: Vec<_> = mask.canonical_names().collect();
         assert_eq!(
             named,
-            ["SeTcbPrivilege", "SeBackupPrivilege", "SeChangeNotifyPrivilege"],
+            [
+                "SeTcbPrivilege",
+                "SeBackupPrivilege",
+                "SeChangeNotifyPrivilege"
+            ],
             "names must come back in bit order"
         );
         assert!(Privileges::empty().canonical_names().next().is_none());
@@ -371,6 +387,9 @@ mod tests {
     fn an_unnamed_bit_is_skipped_rather_than_breaking_the_rest() {
         let unnamed = Privileges::from_bits_retain(1 << 40);
         let mask = Privileges::TCB | unnamed;
-        assert_eq!(mask.canonical_names().collect::<Vec<_>>(), ["SeTcbPrivilege"]);
+        assert_eq!(
+            mask.canonical_names().collect::<Vec<_>>(),
+            ["SeTcbPrivilege"]
+        );
     }
 }
