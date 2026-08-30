@@ -11,8 +11,9 @@
 //! success output ([`OpenStatus`]) returned alongside the handle, never an error.
 //!
 //! [`get_sd`] / [`set_sd`] read and write a file's security descriptor by path;
-//! [`File::fd_get_sd`] / [`File::fd_set_sd`] do so by fd, and [`sysv_get_sd`] /
-//! [`sysv_set_sd`] by System V IPC kind and id. The mount-policy calls
+//! [`File::fd_get_sd`] / [`File::fd_set_sd`] do so by fd, [`fd_get_sd`] /
+//! [`fd_set_sd`] do the same for a *borrowed* fd the caller keeps, and
+//! [`sysv_get_sd`] / [`sysv_set_sd`] by System V IPC kind and id. The mount-policy calls
 //! ([`File::mount_get_policy`] / [`File::mount_set_policy`]) govern how a
 //! superblock without native SD storage is treated.
 
@@ -454,6 +455,45 @@ pub fn set_sd(
             bytes.as_ptr().cast(),
             bytes.len(),
             at_flags as u32,
+        )
+    })
+}
+
+/// Read a security descriptor by fd, borrowing rather than owning it.
+///
+/// [`File::fd_get_sd`] answers the same question, but a [`File`] *owns* its
+/// descriptor: reaching that method from a live `UnixListener` or
+/// `UnixDatagram` would mean surrendering the socket, and dropping the `File`
+/// would close it. A caller stamping a socket it intends to keep serving on
+/// wants this form.
+pub fn fd_get_sd(fd: BorrowedFd<'_>, secinfo: SecInfo) -> Result<SecurityDescriptor> {
+    let bytes = probe(|buf, cap| {
+        // SAFETY: live borrowed fd; (buf, cap) is the getxattr-style output window.
+        unsafe { sys::peios_fd_get_sd(fd.as_raw_fd(), secinfo.bits(), buf, cap) }
+    })?;
+    Ok(SecurityDescriptor::from_bytes(bytes))
+}
+
+/// Write the `secinfo` components of `sd` onto an fd, preserving the rest,
+/// borrowing rather than owning it. A free function for the same reason as
+/// [`fd_get_sd`].
+///
+/// This is the call that closes the window a pathname socket otherwise carries:
+/// [`set_sd`] can only address the socket after `bind` has already published it
+/// under the parent directory's inherited descriptor, whereas this stamps the
+/// descriptor the kernel created at `bind` before anything can reach it. That
+/// distinction only matters when the inherited descriptor is not strictly
+/// narrower than the one being installed — but a datagram socket is live the
+/// instant `bind` returns, with no `listen` to hold it back.
+pub fn fd_set_sd(fd: BorrowedFd<'_>, secinfo: SecInfo, sd: &SecurityDescriptor) -> Result<()> {
+    let bytes = sd.as_bytes();
+    // SAFETY: live borrowed fd; `bytes` (ptr, len) from a live slice.
+    check(unsafe {
+        sys::peios_fd_set_sd(
+            fd.as_raw_fd(),
+            secinfo.bits(),
+            bytes.as_ptr().cast(),
+            bytes.len(),
         )
     })
 }
