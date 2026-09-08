@@ -39,10 +39,10 @@ bitflags! {
         /// Adjust the default DACL / owner / group.
         const ADJUST_DEFAULT = sys::KACS_TOKEN_ADJUST_DEFAULT;
         /// Adjust the token's interactive-environment scope.
-        const ADJUST_INTERACTIVITY_SCOPE = sys::KACS_TOKEN_ADJUST_SESSIONID;
+        const ADJUST_INTERACTIVITY_SCOPE = sys::KACS_TOKEN_ADJUST_INTERACTIVITY_SCOPE;
         /// Historical alias for [`Self::ADJUST_INTERACTIVITY_SCOPE`].
         #[deprecated(note = "use ADJUST_INTERACTIVITY_SCOPE; this right does not change auth_id")]
-        const ADJUST_SESSIONID = sys::KACS_TOKEN_ADJUST_SESSIONID;
+        const ADJUST_SESSIONID = sys::KACS_TOKEN_ADJUST_INTERACTIVITY_SCOPE;
         /// All token rights.
         const ALL_ACCESS = sys::KACS_TOKEN_ALL_ACCESS;
         /// Standard: delete.
@@ -230,7 +230,7 @@ impl TokenClass {
     /// The default-DACL class.
     pub const DEFAULT_DACL: Self = Self(sys::KACS_TOKEN_CLASS_DEFAULT_DACL);
     /// The interactive-environment scope class (a `u32`, not `auth_id`).
-    pub const INTERACTIVITY_SCOPE: Self = Self(sys::KACS_TOKEN_CLASS_SESSION_ID);
+    pub const INTERACTIVITY_SCOPE: Self = Self(sys::KACS_TOKEN_CLASS_INTERACTIVITY_SCOPE);
     /// The token-statistics class, including the LogonSession `auth_id`.
     pub const STATISTICS: Self = Self(sys::KACS_TOKEN_CLASS_STATISTICS);
 }
