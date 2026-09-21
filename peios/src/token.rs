@@ -1326,6 +1326,8 @@ pub enum LogonType {
     NetworkCleartext,
     /// New-credentials logon.
     NewCredentials,
+    /// Interactive logon to a remote graphical desktop.
+    RemoteInteractive,
 }
 
 impl LogonType {
@@ -1337,6 +1339,10 @@ impl LogonType {
             LogonType::Service => sys::KACS_LOGON_TYPE_SERVICE as u8,
             LogonType::NetworkCleartext => sys::KACS_LOGON_TYPE_NETWORK_CLEARTEXT as u8,
             LogonType::NewCredentials => sys::KACS_LOGON_TYPE_NEW_CREDENTIALS as u8,
+            // KACS_LOGON_TYPE_REMOTE_INTERACTIVE. Spelled as its value because
+            // the UAPI headers these bindings are generated from do not carry
+            // the constant yet; swap it back once they do.
+            LogonType::RemoteInteractive => 10,
         }
     }
 }
