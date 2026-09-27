@@ -708,7 +708,8 @@ impl GroupMask {
 pub struct RestrictSpec {
     /// Privileges to delete from the restricted token.
     pub privs_to_delete: Privileges,
-    /// Indices of groups to demote to deny-only (0 = user, 1..N = Nth group).
+    /// Zero-based indices into the groups array to demote to deny-only.
+    /// The user SID is not an entry in this array.
     pub deny_group_indices: Vec<u32>,
     /// Restricting SIDs to add to the restricted token.
     pub restrict_sids: Vec<Sid>,
