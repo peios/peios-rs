@@ -5,7 +5,8 @@
 //!
 //! | Type | Bytes |
 //! |---|---|
-//! | `REG_SZ`, `REG_EXPAND_SZ`, `REG_LINK` | UTF-8, then one NUL |
+//! | `REG_SZ`, `REG_EXPAND_SZ` | UTF-8, then one NUL |
+//! | `REG_LINK` | UTF-8 with no NUL at all, the length delimiting it (LCS TRM §5.2.4) |
 //! | `REG_MULTI_SZ` | each string in UTF-8 and a NUL, then a final NUL |
 //! | `REG_DWORD` | a `u32`, little-endian |
 //! | `REG_DWORD_BIG_ENDIAN` | a `u32`, big-endian |
@@ -13,9 +14,11 @@
 //! | `REG_BINARY` | the bytes themselves |
 //! | `REG_NONE` | nothing |
 //!
-//! [`Data::decode`] forgives a missing or doubled terminating NUL, but nothing
-//! that would lose information: a string that is not UTF-8, or a number of the
-//! wrong length, stays [`Data::Raw`]. [`Data::encode`] writes the forms above.
+//! [`Data::decode`] forgives a string's missing or doubled terminating NUL,
+//! but nothing that would lose information: a string that is not UTF-8, or a
+//! number of the wrong length, stays [`Data::Raw`]. A link target with a NUL
+//! in it stays [`Data::Raw`] too, since the kernel will not follow it.
+//! [`Data::encode`] writes the forms above.
 
 use super::ValueType;
 
@@ -54,7 +57,10 @@ impl Data {
             ValueType::NONE if bytes.is_empty() => Data::None,
             ValueType::SZ => string(bytes).map_or_else(raw, Data::Sz),
             ValueType::EXPAND_SZ => string(bytes).map_or_else(raw, Data::ExpandSz),
-            ValueType::LINK => string(bytes).map_or_else(raw, Data::Link),
+            ValueType::LINK => core::str::from_utf8(bytes)
+                .ok()
+                .filter(|target| !target.contains('\0'))
+                .map_or_else(raw, |target| Data::Link(target.to_owned())),
             ValueType::MULTI_SZ => strings(bytes).map_or_else(raw, Data::MultiSz),
             ValueType::DWORD => bytes
                 .try_into()
@@ -90,11 +96,12 @@ impl Data {
     pub fn encode(&self) -> Vec<u8> {
         match self {
             Data::None => Vec::new(),
-            Data::Sz(s) | Data::ExpandSz(s) | Data::Link(s) => {
+            Data::Sz(s) | Data::ExpandSz(s) => {
                 let mut bytes = s.as_bytes().to_vec();
                 bytes.push(0);
                 bytes
             }
+            Data::Link(target) => target.as_bytes().to_vec(),
             Data::MultiSz(list) => {
                 let mut bytes = Vec::new();
                 for s in list {
@@ -160,6 +167,23 @@ mod tests {
             b"a\0b\0\0"
         );
         assert_eq!(Data::DwordBigEndian(1).encode(), [0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn a_link_target_has_no_nul() {
+        assert_eq!(
+            Data::Link(r"Machine\System".into()).encode(),
+            br"Machine\System"
+        );
+        assert_eq!(
+            Data::decode(ValueType::LINK, br"Machine\System"),
+            Data::Link(r"Machine\System".into())
+        );
+        // With a NUL the kernel will not follow it, so it is not shown as one.
+        assert_eq!(
+            Data::decode(ValueType::LINK, b"Machine\0"),
+            Data::Raw(ValueType::LINK, b"Machine\0".to_vec())
+        );
     }
 
     #[test]
