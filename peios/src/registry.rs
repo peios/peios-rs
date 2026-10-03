@@ -16,6 +16,8 @@
 //! The buffer-returning reads follow the getxattr/`ERANGE` convention: a
 //! zero-capacity (NULL-buffer) probe reports the required size, which we then
 //! allocate and re-read.
+//!
+//! Value data comes back as bytes and a [`ValueType`]; [`Data`] decodes it.
 
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
@@ -27,6 +29,9 @@ use peios_sys as sys;
 use crate::error::{Error, Result};
 use crate::security::SecurityDescriptor;
 use crate::util::{check, check_fd, opt_fd};
+
+mod data;
+pub use data::Data;
 
 const EINVAL: i32 = 22;
 const ENOENT: i32 = 2;
@@ -210,6 +215,26 @@ impl ValueType {
     #[inline]
     pub fn from_raw(v: u32) -> Self {
         Self(v)
+    }
+
+    /// The type's `REG_*` name, or `None` for a code with no name.
+    pub fn name(self) -> Option<&'static str> {
+        Some(match self {
+            Self::NONE => "REG_NONE",
+            Self::SZ => "REG_SZ",
+            Self::EXPAND_SZ => "REG_EXPAND_SZ",
+            Self::BINARY => "REG_BINARY",
+            Self::DWORD => "REG_DWORD",
+            Self::DWORD_BIG_ENDIAN => "REG_DWORD_BIG_ENDIAN",
+            Self::LINK => "REG_LINK",
+            Self::MULTI_SZ => "REG_MULTI_SZ",
+            Self::RESOURCE_LIST => "REG_RESOURCE_LIST",
+            Self::FULL_RESOURCE_DESCRIPTOR => "REG_FULL_RESOURCE_DESCRIPTOR",
+            Self::RESOURCE_REQUIREMENTS_LIST => "REG_RESOURCE_REQUIREMENTS_LIST",
+            Self::QWORD => "REG_QWORD",
+            Self::TOMBSTONE => "REG_TOMBSTONE",
+            _ => return None,
+        })
     }
 }
 
