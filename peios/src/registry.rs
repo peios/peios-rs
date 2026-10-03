@@ -838,12 +838,28 @@ impl Key {
     /// [`Transaction`] for all or nothing. A transaction holds at most 4096
     /// operations (LCS TRM §5.7.2), so a larger tree fails with `ENOMEM`
     /// and, the transaction aborted, nothing is deleted.
+    ///
+    /// Every key in the tree is opened before any is deleted, and held open
+    /// until the end, so a tree needs as many descriptors as it has keys.
+    /// loregd makes an open wait while a transaction that has written is
+    /// open, until it times out (PEI-1241); opening first avoids that.
     pub fn delete_tree(&self, layer: Option<&str>, txn: Option<&Transaction>) -> Result<u64> {
+        let mut under = Vec::new();
+        self.gather(txn, &mut under)?;
+        for key in &under {
+            key.delete_key(layer, txn)?;
+        }
+        self.delete_key(layer, txn)?;
+        Ok(under.len() as u64 + 1)
+    }
+
+    /// Opens every key under this one into `under`, each after the keys
+    /// under it, so that deleting them in order deletes children first.
+    fn gather(&self, txn: Option<&Transaction>, under: &mut Vec<Key>) -> Result<()> {
         let names = self
             .subkeys(txn)
             .map(|subkey| subkey.map(|subkey| subkey.name))
             .collect::<Result<Vec<_>>>()?;
-        let mut deleted = 0;
         for name in names {
             let name = String::from_utf8(name).map_err(|_| Error::from_raw_os_error(EINVAL))?;
             let child = Key::open(
@@ -852,10 +868,10 @@ impl Key {
                 KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS,
                 OpenFlags::OPEN_LINK,
             )?;
-            deleted += child.delete_tree(layer, txn)?;
+            child.gather(txn, under)?;
+            under.push(child);
         }
-        self.delete_key(layer, txn)?;
-        Ok(deleted + 1)
+        Ok(())
     }
 
     /// Create a hidden path entry masking this key in a layer (`None` = base);

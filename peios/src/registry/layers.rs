@@ -18,15 +18,20 @@
 //! Who may do what is the metadata key's descriptor's to say, except that
 //! a precedence above 0 also needs `SeTcbPrivilege` (LCS TRM §5.3.4).
 
-use super::{CreateFlags, Data, Key, KeyAccess, OpenFlags, Transaction, ValueType};
+use super::{CreateFlags, Data, Disposition, Key, KeyAccess, OpenFlags, Transaction, ValueType};
 use crate::error::{Error, Result};
 use crate::security::{Sid, SidRef};
 
 const EINVAL: i32 = 22;
 const ENOENT: i32 = 2;
+const EEXIST: i32 = 17;
 
 /// The key that holds a key for each layer.
 pub const LAYERS: &str = r"Machine\System\Registry\Layers";
+
+/// [`LAYERS`] as a key that is always there and the keys under it on the
+/// way, for making it.
+const LAYERS_FROM: (&str, [&str; 2]) = (r"Machine\System", ["Registry", "Layers"]);
 
 /// The layer a write goes to when it names none.
 pub const BASE: &str = "base";
@@ -135,14 +140,37 @@ pub fn read(name: &str) -> Result<Layer> {
 
 /// Creates the layer `name`, in one transaction so that its values are all
 /// there when the kernel first reads them. Its owner is whoever creates
-/// it. A precedence above 0 needs `SeTcbPrivilege`.
+/// it. A precedence above 0 needs `SeTcbPrivilege`. [`LAYERS`] is created
+/// too, if this is the first layer; a layer of that name already there is
+/// `EEXIST`.
 pub fn create(name: &str, precedence: u32, enabled: bool) -> Result<()> {
     if is_base(name) || name.is_empty() || name.contains(['\\', '/']) {
         return Err(Error::from_raw_os_error(EINVAL));
     }
-    let layers = Key::open(None, LAYERS, KeyAccess::CREATE_SUB_KEY, OpenFlags::empty())?;
     let txn = Transaction::begin()?;
-    let (key, _) = Key::create(
+    let layers = match Key::open(None, LAYERS, KeyAccess::CREATE_SUB_KEY, OpenFlags::empty()) {
+        Ok(layers) => layers,
+        // The first layer: the keys above it are made, in the same
+        // transaction, from the one that is always there.
+        Err(e) if e.raw_os_error() == Some(ENOENT) => {
+            let (above, rest) = LAYERS_FROM;
+            let mut key = Key::open(None, above, KeyAccess::CREATE_SUB_KEY, OpenFlags::empty())?;
+            for part in rest {
+                key = Key::create(
+                    Some(&key),
+                    part,
+                    KeyAccess::CREATE_SUB_KEY,
+                    CreateFlags::empty(),
+                    None,
+                    Some(&txn),
+                )?
+                .0;
+            }
+            key
+        }
+        Err(e) => return Err(e),
+    };
+    let (key, made) = Key::create(
         Some(&layers),
         name,
         KeyAccess::SET_VALUE,
@@ -150,6 +178,9 @@ pub fn create(name: &str, precedence: u32, enabled: bool) -> Result<()> {
         None,
         Some(&txn),
     )?;
+    if made == Disposition::OpenedExisting {
+        return Err(Error::from_raw_os_error(EEXIST));
+    }
     key.set_value(b"Precedence", ValueType::DWORD, &precedence.to_le_bytes())
         .in_txn(&txn)
         .call()?;
