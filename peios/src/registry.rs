@@ -31,6 +31,7 @@ use crate::security::SecurityDescriptor;
 use crate::util::{check, check_fd, opt_fd};
 
 mod data;
+pub mod layers;
 pub use data::Data;
 
 const EINVAL: i32 = 22;
@@ -825,6 +826,36 @@ impl Key {
         let (layer_ptr, layer_len) = opt_layer(layer);
         // SAFETY: live fd; `layer` valid for `layer_len` for the call.
         check(unsafe { sys::peios_reg_delete_key(self.raw(), layer_ptr, layer_len, txn_fd) })
+    }
+
+    /// Deletes this key and every key under it from `layer` (`None` = base),
+    /// the deepest first, since a key with children cannot be deleted
+    /// (`ENOTEMPTY`). Returns how many keys were deleted.
+    ///
+    /// This key must be open with [`KeyAccess::DELETE`] and
+    /// [`KeyAccess::ENUMERATE_SUB_KEYS`]; each key under it is opened with
+    /// the same, so the caller needs both on every one. Pass a
+    /// [`Transaction`] for all or nothing. A transaction holds at most 4096
+    /// operations (LCS TRM §5.7.2), so a larger tree fails with `ENOMEM`
+    /// and, the transaction aborted, nothing is deleted.
+    pub fn delete_tree(&self, layer: Option<&str>, txn: Option<&Transaction>) -> Result<u64> {
+        let names = self
+            .subkeys(txn)
+            .map(|subkey| subkey.map(|subkey| subkey.name))
+            .collect::<Result<Vec<_>>>()?;
+        let mut deleted = 0;
+        for name in names {
+            let name = String::from_utf8(name).map_err(|_| Error::from_raw_os_error(EINVAL))?;
+            let child = Key::open(
+                Some(self),
+                &name,
+                KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS,
+                OpenFlags::OPEN_LINK,
+            )?;
+            deleted += child.delete_tree(layer, txn)?;
+        }
+        self.delete_key(layer, txn)?;
+        Ok(deleted + 1)
     }
 
     /// Create a hidden path entry masking this key in a layer (`None` = base);
