@@ -1,18 +1,18 @@
-//! Process security context — the process security block (PSB) mitigation
-//! controls.
+//! Process security context — the process security block (PSB).
 //!
-//! The single operation here turns on process mitigation bits via
-//! [`Process::set_mitigations`]. The bits are the [`Mitigations`] flags (the
-//! kernel's `KACS_MIT_*` set); they are **one-way** — a mitigation can be
-//! switched on but never off — and activation-backed, so a request that cannot
-//! be activated fails closed without mutating anything. See PSD-004 §5.
+//! [`Process::set_mitigations`] turns on process mitigation bits. The bits are
+//! the [`Mitigations`] flags (the kernel's `KACS_MIT_*` set); they are
+//! **one-way** — a mitigation can be switched on but never off — and
+//! activation-backed, so a request that cannot be activated fails closed
+//! without mutating anything. [`Process::psb`] reads a process's PSB back:
+//! its PIP and its committed mitigations.
 
 use std::os::fd::BorrowedFd;
 
 use bitflags::bitflags;
 use peios_sys as sys;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::util::{check, opt_fd};
 
 bitflags! {
@@ -66,5 +66,59 @@ impl Process {
         // SAFETY: `pidfd`, if present, is a live borrowed fd for the call; the
         // `-1` sentinel (via opt_fd) targets the calling process.
         check(unsafe { sys::peios_process_set_mitigations(opt_fd(pidfd), mitigations.bits()) })
+    }
+
+    /// Read process `pid`'s PSB; `None` reads the caller's own.
+    ///
+    /// Another process's needs `PROCESS_QUERY_LIMITED` on its descriptor, and
+    /// not PIP dominance: a protected process's PIP is readable when nothing
+    /// else about it is.
+    pub fn psb(pid: Option<u32>) -> Result<Psb> {
+        let pid = match pid {
+            None => 0,
+            Some(pid) => libc::c_int::try_from(pid)
+                .ok()
+                .filter(|&pid| pid > 0)
+                .ok_or_else(|| Error::from_raw_os_error(libc::EINVAL))?,
+        };
+        let mut raw = sys::peios_psb {
+            pip_type: 0,
+            pip_trust: 0,
+            mitigations: 0,
+            process_guid: [0; 16],
+        };
+        // SAFETY: `raw` is writable for the call.
+        check(unsafe { sys::peios_process_psb(pid, &mut raw) })?;
+        Ok(Psb {
+            pip_type: raw.pip_type,
+            pip_trust: raw.pip_trust,
+            mitigations: Mitigations::from_bits_retain(raw.mitigations),
+            process_guid: raw.process_guid,
+        })
+    }
+}
+
+/// A process's PSB, as [`Process::psb`] reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Psb {
+    /// PIP type: 0 for none, 512 for Protected.
+    pub pip_type: u32,
+    /// PIP trust within the type: 8192 for `PeiosTcb`.
+    pub pip_trust: u32,
+    /// The committed mitigations.
+    pub mitigations: Mitigations,
+    /// The process's GUID: its identity for its whole life, which events carry.
+    pub process_guid: [u8; 16],
+}
+
+impl Psb {
+    /// PIP type Protected.
+    pub const PIP_PROTECTED: u32 = 512;
+    /// PIP trust `PeiosTcb`.
+    pub const PIP_TRUST_PEIOS_TCB: u32 = 8192;
+
+    /// Whether the process is PIP-protected at all.
+    pub fn is_protected(&self) -> bool {
+        self.pip_type != 0
     }
 }
