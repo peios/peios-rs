@@ -1262,6 +1262,16 @@ mod tests {
     use crate::error::Error;
     use peios_sys as sys;
 
+    #[test]
+    fn a_raw_logon_type_names_its_kind_and_an_unknown_one_none() {
+        use super::LogonType;
+        assert_eq!(LogonType::from_raw(2), Some(LogonType::Interactive));
+        assert_eq!(LogonType::from_raw(5), Some(LogonType::Service));
+        assert_eq!(LogonType::from_raw(10), Some(LogonType::RemoteInteractive));
+        assert_eq!(LogonType::from_raw(0), None);
+        assert_eq!(LogonType::from_raw(7), None);
+    }
+
     fn raw_statistics() -> sys::peios_token_statistics {
         sys::peios_token_statistics {
             token_id: 41,
@@ -1377,6 +1387,97 @@ impl Session {
     pub fn destroy_empty(session: SessionId) -> Result<()> {
         // SAFETY: a plain syscall.
         check(unsafe { sys::peios_session_destroy_empty(session.0) })
+    }
+
+    /// Every live logon session, as the kernel lists them. Needs
+    /// Administrators or SYSTEM (`EACCES` otherwise); `ENOENT` where
+    /// securityfs is not mounted.
+    ///
+    /// The listing is one moment. It includes sessions nothing has used yet,
+    /// so a session may have no process in it.
+    pub fn list() -> Result<Vec<LogonSessionInfo>> {
+        struct Reader(*mut sys::peios_logon_sessions);
+        impl Drop for Reader {
+            fn drop(&mut self) {
+                // SAFETY: an open reader, closed once.
+                unsafe { sys::peios_logon_sessions_close(self.0) }
+            }
+        }
+
+        // SAFETY: takes no arguments; NULL with errno on failure.
+        let reader = unsafe { sys::peios_logon_sessions_open() };
+        if reader.is_null() {
+            return Err(Error::last_os_error());
+        }
+        let reader = Reader(reader);
+        let mut sessions = Vec::new();
+        loop {
+            let mut raw = core::mem::MaybeUninit::<sys::peios_logon_session>::uninit();
+            // SAFETY: `reader` is open and `raw` writable.
+            match unsafe { sys::peios_logon_sessions_next(reader.0, raw.as_mut_ptr()) } {
+                0 => break,
+                1 => {}
+                _ => return Err(Error::last_os_error()),
+            }
+            // SAFETY: filled by the call above; its pointers are valid until
+            // the next call, and are copied out before it.
+            let raw = unsafe { raw.assume_init() };
+            let sid = unsafe { core::slice::from_raw_parts(raw.user_sid, raw.user_sid_len as usize) };
+            let package = unsafe {
+                core::slice::from_raw_parts(raw.auth_package as *const u8, raw.auth_package_len as usize)
+            };
+            let user = SidRef::from_bytes(sid)
+                .map(Sid::from_ref)
+                .ok_or_else(|| Error::from_raw_os_error(libc::EPROTO))?;
+            sessions.push(LogonSessionInfo {
+                id: SessionId(raw.logon_session_id),
+                user,
+                logon_type: raw.logon_type,
+                auth_package: String::from_utf8_lossy(package).into_owned(),
+                created_at: std::time::UNIX_EPOCH + std::time::Duration::from_secs(raw.created_at),
+            });
+        }
+        Ok(sessions)
+    }
+}
+
+/// One live logon session, as [`Session::list`] gives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogonSessionInfo {
+    /// The session's id: the `auth_id` of every token in it.
+    pub id: SessionId,
+    /// Who it is for.
+    pub user: Sid,
+    /// The raw `KACS_LOGON_TYPE_*`; [`LogonType::from_raw`] names it.
+    pub logon_type: u32,
+    /// The authentication package that made it, such as a principal source's
+    /// name; empty for the kernel's own sessions.
+    pub auth_package: String,
+    /// When the session was made.
+    pub created_at: std::time::SystemTime,
+}
+
+impl LogonSessionInfo {
+    /// SYSTEM's session, which the kernel makes at boot.
+    pub const SYSTEM: SessionId = SessionId(999);
+    /// The Anonymous token's session.
+    pub const ANONYMOUS: SessionId = SessionId(998);
+}
+
+impl LogonType {
+    /// The logon type a raw `KACS_LOGON_TYPE_*` value names, if any.
+    pub fn from_raw(raw: u32) -> Option<LogonType> {
+        [
+            LogonType::Interactive,
+            LogonType::Network,
+            LogonType::Batch,
+            LogonType::Service,
+            LogonType::NetworkCleartext,
+            LogonType::NewCredentials,
+            LogonType::RemoteInteractive,
+        ]
+        .into_iter()
+        .find(|kind| u32::from(kind.to_raw()) == raw)
     }
 }
 
