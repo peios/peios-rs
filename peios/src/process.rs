@@ -13,6 +13,7 @@ use bitflags::bitflags;
 use peios_sys as sys;
 
 use crate::error::{Error, Result};
+use crate::security::GenericMapping;
 use crate::util::{check, opt_fd};
 
 bitflags! {
@@ -51,11 +52,44 @@ impl Mitigations {
     pub const ALL: Self = Self::from_bits_retain(sys::KACS_MIT_ALL);
 }
 
+bitflags! {
+    /// The process object's rights (the kernel's `KACS_PROCESS_*`): what a
+    /// process's descriptor grants on it, such as ending it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub struct ProcessAccess: u32 {
+        /// Send it a signal whose default action ends it.
+        const TERMINATE = sys::KACS_PROCESS_TERMINATE;
+        /// Send it a signal whose default action is to ignore.
+        const SIGNAL = sys::KACS_PROCESS_SIGNAL;
+        /// Read its memory.
+        const VM_READ = sys::KACS_PROCESS_VM_READ;
+        /// Write its memory.
+        const VM_WRITE = sys::KACS_PROCESS_VM_WRITE;
+        /// Take a descriptor from it.
+        const DUP_HANDLE = sys::KACS_PROCESS_DUP_HANDLE;
+        /// Change its priority, limits and the like.
+        const SET_INFORMATION = sys::KACS_PROCESS_SET_INFORMATION;
+        /// Read its token and its detailed `/proc` entries.
+        const QUERY_INFORMATION = sys::KACS_PROCESS_QUERY_INFORMATION;
+        /// Stop or continue it.
+        const SUSPEND_RESUME = sys::KACS_PROCESS_SUSPEND_RESUME;
+        /// Read its name, state, CPU and memory, and its PSB.
+        const QUERY_LIMITED = sys::KACS_PROCESS_QUERY_LIMITED;
+    }
+}
+
 /// Process-security operations on the PSB.
 #[derive(Debug, Clone, Copy)]
 pub struct Process;
 
 impl Process {
+    /// The canonical KACS generic mapping for the process object class, for
+    /// an AccessCheck against a process's descriptor.
+    pub fn generic_mapping() -> GenericMapping {
+        // SAFETY: reading a libpeios-exported POD static.
+        GenericMapping::from_raw(unsafe { sys::peios_process_generic_mapping })
+    }
+
     /// Turn on process mitigation bits (one-way — bits can only be set).
     ///
     /// `pidfd == None` targets the calling process; targeting another (via a
