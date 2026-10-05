@@ -16,7 +16,7 @@ use std::ffi::CString;
 use peios_sys as sys;
 
 use super::acl::Acl;
-use super::SecurityDescriptor;
+use super::{GenericMapping, SecurityDescriptor};
 use crate::error::{Error, Result};
 use crate::file::SecInfo;
 use crate::util::{probe, probe_str};
@@ -82,11 +82,8 @@ pub fn format_condition(artx: &[u8]) -> Result<String> {
     })
 }
 
-/// Recompute a child SD's inherited ACEs from a parent SD: strip the ACEs
-/// carrying `ACE_FLAG_INHERITED` from the child DACL, re-derive them from the
-/// parent DACL (MS-DTYP §2.5.3.4), and append them after the child's explicit
-/// ACEs. Owner/group/SACL and the control bits pass through. Both inputs must
-/// be self-relative; `is_container` marks a container child.
+/// [`reinherit_with`] for the DACL alone, with no generic mapping: generic
+/// rights stay as written, and a protected DACL is left as it is.
 pub fn reinherit(parent: &[u8], child: &[u8], is_container: bool) -> Result<SecurityDescriptor> {
     let bytes = probe(|buf, cap| unsafe {
         sys::peios_sd_reinherit(
@@ -97,6 +94,39 @@ pub fn reinherit(parent: &[u8], child: &[u8], is_container: bool) -> Result<Secu
             child.as_ptr().cast(),
             child.len(),
             is_container as c_int,
+        )
+    })?;
+    Ok(SecurityDescriptor::from_bytes(bytes))
+}
+
+/// Re-propagate to a child SD from its parent SD (PCDS §5.6): for each list
+/// `info` selects ([`SecInfo::DACL`], [`SecInfo::SACL`]) that the child does
+/// not protect, drop the child's inherited ACEs and append what the parent's
+/// list passes to it, as KACS gives it to a child it creates — CREATOR OWNER
+/// and CREATOR GROUP resolved to the child's owner and group, generic rights
+/// mapped through `mapping` where they apply (`None` leaves them), and an ACE
+/// that also goes on from a container kept as an inherit-only copy. A
+/// protected list, a list not selected, the owner and the group pass
+/// through. Both inputs must be self-relative.
+pub fn reinherit_with(
+    parent: &[u8],
+    child: &[u8],
+    is_container: bool,
+    mapping: Option<&GenericMapping>,
+    info: SecInfo,
+) -> Result<SecurityDescriptor> {
+    let mapping = mapping.map_or(std::ptr::null(), |m| &m.0 as *const sys::kacs_generic_mapping);
+    let bytes = probe(|buf, cap| unsafe {
+        sys::peios_sd_reinherit_ex(
+            buf,
+            cap,
+            parent.as_ptr().cast(),
+            parent.len(),
+            child.as_ptr().cast(),
+            child.len(),
+            is_container as c_int,
+            mapping,
+            info.bits(),
         )
     })?;
     Ok(SecurityDescriptor::from_bytes(bytes))
@@ -143,6 +173,19 @@ mod tests {
             .unwrap()
             .as_bytes()
             .is_empty());
+    }
+
+    /// CREATOR OWNER resolves to the child's owner and carries on, generic
+    /// rights are mapped where they apply, and a protected SACL is left.
+    #[test]
+    fn reinherit_with_resolves_maps_and_skips_protection() {
+        let parent = parse("O:BAG:BAD:(A;OICIIO;GA;;;CO)S:(AU;OICISA;FA;;;WD)").unwrap();
+        let child = parse("O:SYG:SYD:S:P").unwrap();
+        let file = GenericMapping::new(0x120089, 0x120116, 0x1200a0, 0x1f01ff);
+        let got = reinherit_with(parent.as_bytes(), child.as_bytes(), true, Some(&file), SecInfo::DACL | SecInfo::SACL).unwrap();
+        let text = format(got.as_bytes()).unwrap();
+        assert!(text.contains("(A;ID;FA;;;SY)(A;CIOIIOID;GA;;;CO)"), "got {text:?}");
+        assert!(text.contains("S:P") && !text.contains(";WD)"), "the SACL is protected: {text:?}");
     }
 
     #[test]
