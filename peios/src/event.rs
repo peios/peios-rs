@@ -6,8 +6,9 @@
 //! emit or observe events. Each payload is a single MessagePack value: build it
 //! and parse it with the [`crate::msgpack`] module.
 //!
-//! Producers call [`emit`] / [`emit_batch`] (these need `SeAuditPrivilege`).
-//! Consumers attach to a CPU's ring and drain it. Two consumer paths are offered:
+//! Producers call [`emit`] / [`emit_batch`] (these need `SeAuditPrivilege`),
+//! asking an [`EventPolicy`] first whether the event's type is switched on, so
+//! that a type that is off costs no payload (PGSS §6.9). Consumers attach to a CPU's ring and drain it. Two consumer paths are offered:
 //! the high-level [`EventReader`], which owns the attach + mmap and hides the
 //! lock-free drain (barriers, lapping recovery, lost-event accounting, resize,
 //! futex wait — just loop [`next`](EventReader::next) / [`wait`](EventReader::wait));
@@ -106,6 +107,116 @@ pub fn emit_batch(entries: &[EmitEntry<'_>]) -> Result<usize> {
         Ok(emitted as usize)
     } else {
         Err(Error::last_os_error())
+    }
+}
+
+/// An event type's tier (PGSS §6.8): what the emission policy decides when
+/// nothing in the registry is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Tier {
+    /// Always on; never consults the policy.
+    Essential,
+    /// On unless the policy switches it off.
+    Standard,
+    /// Off unless the policy switches it on.
+    Verbose,
+    /// Off unless the policy switches it on.
+    Debug,
+}
+
+impl Tier {
+    fn raw(self) -> u32 {
+        match self {
+            Tier::Essential => sys::PEIOS_EVENT_TIER_ESSENTIAL,
+            Tier::Standard => sys::PEIOS_EVENT_TIER_STANDARD,
+            Tier::Verbose => sys::PEIOS_EVENT_TIER_VERBOSE,
+            Tier::Debug => sys::PEIOS_EVENT_TIER_DEBUG,
+        }
+    }
+}
+
+/// A cached, watched view of the emission policy, `Machine\Generic\Events`
+/// (PGSS §6.9).
+///
+/// Ask it before building a payload; [`emit_with`](Self::emit_with) does both.
+/// It keeps each type's setting current with a registry watch, so a committed
+/// change applies to the next decision; without a readable registry every
+/// decision is by tier. It is safe to share between threads (decisions are
+/// serialised), but not across `fork()`: a child opens its own.
+pub struct EventPolicy {
+    raw: std::sync::Mutex<*mut sys::peios_event_policy>,
+}
+
+// SAFETY: the libpeios handle is usable from any thread, one at a time; the
+// mutex is what makes it one at a time.
+unsafe impl Send for EventPolicy {}
+// SAFETY: as above — every access goes through the mutex.
+unsafe impl Sync for EventPolicy {}
+
+impl EventPolicy {
+    /// Open a view of the policy. Fails only for want of memory: with no
+    /// registry, it decides by tier until one appears.
+    pub fn open() -> Result<EventPolicy> {
+        // SAFETY: a plain call returning an owned handle or NULL/errno.
+        let raw = unsafe { sys::peios_event_policy_open() };
+        if raw.is_null() {
+            Err(Error::last_os_error())
+        } else {
+            Ok(EventPolicy {
+                raw: std::sync::Mutex::new(raw),
+            })
+        }
+    }
+
+    /// Is `event_type` at `tier` switched on? An error is caller error only
+    /// (`EINVAL`: a malformed type, or one longer than 65535 bytes); registry
+    /// trouble falls back to the tier.
+    pub fn enabled(&self, event_type: &str, tier: Tier) -> Result<bool> {
+        let len = u16::try_from(event_type.len())
+            .map_err(|_| Error::from_raw_os_error(EINVAL))?;
+        let raw = self.raw.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: a live handle, used under the lock; (ptr, len) from a live str.
+        let r = unsafe {
+            sys::peios_event_policy_enabled(
+                *raw,
+                event_type.as_ptr().cast::<c_char>(),
+                len,
+                tier.raw(),
+            )
+        };
+        match r {
+            1 => Ok(true),
+            0 => Ok(false),
+            _ => Err(Error::last_os_error()),
+        }
+    }
+
+    /// Emit an event if its type is switched on, building the payload only
+    /// then. Returns whether it was emitted.
+    pub fn emit_with<P, F>(&self, event_type: &str, tier: Tier, build: F) -> Result<bool>
+    where
+        P: AsRef<[u8]>,
+        F: FnOnce() -> P,
+    {
+        if !self.enabled(event_type, tier)? {
+            return Ok(false);
+        }
+        emit(event_type, build().as_ref())?;
+        Ok(true)
+    }
+}
+
+impl Drop for EventPolicy {
+    fn drop(&mut self) {
+        let raw = *self.raw.get_mut().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: `raw` came from _open and is closed exactly once.
+        unsafe { sys::peios_event_policy_close(raw) };
+    }
+}
+
+impl std::fmt::Debug for EventPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EventPolicy").finish_non_exhaustive()
     }
 }
 
@@ -374,3 +485,63 @@ impl Drop for EventRing {
 }
 
 const EINVAL: i32 = 22;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Off a Peios kernel the registry cannot be read, so the policy decides by
+    // tier: what PGSS §6.9 requires of an emitter with no readable policy.
+    #[test]
+    fn policy_without_a_registry_decides_by_tier() {
+        let p = EventPolicy::open().unwrap();
+        assert!(p.enabled("a.b.c", Tier::Essential).unwrap());
+        assert!(p.enabled("a.b.c", Tier::Standard).unwrap());
+        assert!(!p.enabled("a.b.c", Tier::Verbose).unwrap());
+        assert!(!p.enabled("a.b.c", Tier::Debug).unwrap());
+    }
+
+    #[test]
+    fn policy_rejects_malformed_types() {
+        let p = EventPolicy::open().unwrap();
+        for bad in ["", "a..b", "a.b\\c.d"] {
+            let e = p.enabled(bad, Tier::Standard).unwrap_err();
+            assert_eq!(e.raw_os_error(), Some(EINVAL), "{bad:?}");
+        }
+        let long = "a.".repeat(40000) + "b";
+        assert_eq!(
+            p.enabled(&long, Tier::Standard).unwrap_err().raw_os_error(),
+            Some(EINVAL)
+        );
+    }
+
+    #[test]
+    fn emit_with_builds_nothing_for_an_off_type() {
+        let p = EventPolicy::open().unwrap();
+        let emitted = p
+            .emit_with("a.b.c", Tier::Debug, || -> Vec<u8> {
+                panic!("built a payload for a type that is off")
+            })
+            .unwrap();
+        assert!(!emitted);
+    }
+
+    #[test]
+    fn policy_is_shareable_between_threads() {
+        let p = std::sync::Arc::new(EventPolicy::open().unwrap());
+        let handles: Vec<_> = (0..4)
+            .map(|i| {
+                let p = p.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..100 {
+                        let t = std::format!("t{i}.x.y");
+                        assert!(p.enabled(&t, Tier::Standard).unwrap());
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+    }
+}
