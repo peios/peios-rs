@@ -72,8 +72,12 @@ bitflags! {
         const TCB = sys::KACS_SE_TCB_PRIVILEGE as u64;
         /// `SeSecurityPrivilege` — manage auditing and the security log.
         const SECURITY = sys::KACS_SE_SECURITY_PRIVILEGE as u64;
+        /// `SeTakeOwnershipPrivilege`.
+        const TAKE_OWNERSHIP = sys::KACS_SE_TAKE_OWNERSHIP_PRIVILEGE as u64;
         /// `SeLoadDriverPrivilege`.
         const LOAD_DRIVER = sys::KACS_SE_LOAD_DRIVER_PRIVILEGE as u64;
+        /// `SeSystemProfilePrivilege`.
+        const SYSTEM_PROFILE = sys::KACS_SE_SYSTEM_PROFILE_PRIVILEGE as u64;
         /// `SeSystemtimePrivilege`.
         const SYSTEMTIME = sys::KACS_SE_SYSTEMTIME_PRIVILEGE as u64;
         /// `SeProfileSingleProcessPrivilege`.
@@ -106,6 +110,8 @@ bitflags! {
         const MANAGE_VOLUME = sys::KACS_SE_MANAGE_VOLUME_PRIVILEGE as u64;
         /// `SeImpersonatePrivilege`.
         const IMPERSONATE = sys::KACS_SE_IMPERSONATE_PRIVILEGE as u64;
+        /// `SeRelabelPrivilege`.
+        const RELABEL = sys::KACS_SE_RELABEL_PRIVILEGE as u64;
         /// `SeCreateSymbolicLinkPrivilege`.
         const CREATE_SYMBOLIC_LINK = sys::KACS_SE_CREATE_SYMBOLIC_LINK_PRIVILEGE;
         // Bit 63 was `SeBindPrivilegedPortPrivilege`, retired when port
@@ -135,7 +141,9 @@ const NAMES: &[(&str, Privileges)] = &[
     ("SeIncreaseQuotaPrivilege", Privileges::INCREASE_QUOTA),
     ("SeTcbPrivilege", Privileges::TCB),
     ("SeSecurityPrivilege", Privileges::SECURITY),
+    ("SeTakeOwnershipPrivilege", Privileges::TAKE_OWNERSHIP),
     ("SeLoadDriverPrivilege", Privileges::LOAD_DRIVER),
+    ("SeSystemProfilePrivilege", Privileges::SYSTEM_PROFILE),
     ("SeSystemtimePrivilege", Privileges::SYSTEMTIME),
     (
         "SeProfileSingleProcessPrivilege",
@@ -154,6 +162,7 @@ const NAMES: &[(&str, Privileges)] = &[
     ("SeRemoteShutdownPrivilege", Privileges::REMOTE_SHUTDOWN),
     ("SeManageVolumePrivilege", Privileges::MANAGE_VOLUME),
     ("SeImpersonatePrivilege", Privileges::IMPERSONATE),
+    ("SeRelabelPrivilege", Privileges::RELABEL),
     (
         "SeCreateSymbolicLinkPrivilege",
         Privileges::CREATE_SYMBOLIC_LINK,
@@ -169,11 +178,7 @@ impl Privileges {
     /// would mean this function decides that two spellings name one privilege —
     /// a judgement that belongs to whatever is parsing, not to the table.
     ///
-    /// Returns `None` for an unknown name, including one naming a privilege the
-    /// kernel enforces but the ABI has not published: `SeTakeOwnershipPrivilege`
-    /// and `SeRelabelPrivilege` are honoured by AccessCheck and named in audit
-    /// output, yet absent from the headers this crate is built against, so they
-    /// cannot be named here without hand-writing a bit. See PEI-186.
+    /// Returns `None` for an unknown name.
     pub fn parse_name(name: &str) -> Option<Privileges> {
         NAMES
             .iter()
@@ -329,13 +334,21 @@ mod tests {
         assert_eq!(Privileges::parse_name("SeTCBPrivilege"), None);
     }
 
-    /// Privileges the kernel enforces but the ABI has not published. If either
-    /// of these ever starts resolving, PEI-186 has landed and they should be in
-    /// the table — with their bit taken from `sys::`, never written out here.
+    /// Every published privilege must remain nameable, including those that
+    /// were missing while this crate used stale kernel headers (PEI-186).
     #[test]
-    fn the_unpublished_privileges_are_not_nameable() {
-        assert_eq!(Privileges::parse_name("SeTakeOwnershipPrivilege"), None);
-        assert_eq!(Privileges::parse_name("SeRelabelPrivilege"), None);
+    fn previously_missing_privileges_match_the_published_abi() {
+        for (name, bits) in [
+            ("SeTakeOwnershipPrivilege", 1u64 << 9),
+            ("SeSystemProfilePrivilege", 1u64 << 11),
+            ("SeRelabelPrivilege", 1u64 << 32),
+        ] {
+            let privilege = Privileges::parse_name(name).expect("published privilege");
+            assert_eq!(privilege.bits(), bits);
+            assert_eq!(privilege.canonical_name(), Some(name));
+        }
+        let bits: Vec<_> = Privileges::all_named().map(|(_, p)| p.bits()).collect();
+        assert!(bits.windows(2).all(|p| p[0] < p[1]));
     }
 
     /// Mounting is gated on this privilege rather than on `TCB`, so it has to
