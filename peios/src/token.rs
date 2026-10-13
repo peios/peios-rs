@@ -516,6 +516,10 @@ impl Token {
     }
 
     /// Duplicate this token into a new one.
+    ///
+    /// The requested level must not exceed the source's level. A Primary
+    /// result must be at least Impersonation, even though privileged minting
+    /// can create primary tokens with lower derivation ceilings.
     pub fn duplicate(
         &self,
         access: TokenAccess,
@@ -986,10 +990,12 @@ impl TokenBuilder {
 
     /// Set the token type and impersonation level.
     ///
-    /// The level is meaningful on a primary too: it is the ceiling on
-    /// everything derived from the token, so a logon or service token is
-    /// minted at [`ImpersonationLevel::Delegation`]. The kernel currently
-    /// refuses a primary below [`ImpersonationLevel::Impersonation`].
+    /// Choose the level deliberately: it caps everything derived from a
+    /// primary too. CreateToken accepts all four levels. Identification lets
+    /// peers identify the process without acting as it; Anonymous hides its
+    /// identity from peers. The process still acts as its own user.
+    /// Older kernels reject primary levels below Impersonation. Duplication
+    /// retains its separate Impersonation floor for primary results.
     pub fn token_type(&mut self, ty: TokenType, imp_level: ImpersonationLevel) -> &mut Self {
         // SAFETY: live builder.
         unsafe { sys::peios_token_builder_type(self.raw, ty.to_raw(), imp_level.to_raw()) };
