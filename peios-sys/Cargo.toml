@@ -9,6 +9,10 @@ description = "Raw FFI bindings to libpeios (the Peios userspace C ABI)"
 links = "peios"
 build = "build.rs"
 
+# Minimum C SDK consumed by this crate; build.rs enforces it for pkg-config.
+[package.metadata.libpeios]
+minimum-version = "0.5.11"
+
 [features]
 default = []           # → dynamic link against libpeios.so
 static = []            # → static link against libpeios.a
