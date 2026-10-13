@@ -41,6 +41,13 @@ consumers use. (pkm uapi types are the one shared exception — see below.)
    - `PEIOS_INCLUDE` — dir containing `<peios.h>`
    - `PKM_UAPI` — dir containing `<pkm/*.h>` (referenced by peios.h signatures)
 2. **pkg-config** — if libpeios installs a `peios.pc` on `PKG_CONFIG_PATH`.
+   The required minimum is declared once in `peios-sys/Cargo.toml` as
+   `package.metadata.libpeios.minimum-version`. Older SDKs fail before bindgen,
+   with a diagnostic naming both required and detected versions.
+
+The explicit environment override bypasses this version check. Supply compatible,
+matching headers and library at or above the declared minimum; libpeios headers
+currently have no version macro to validate that path.
 
 For a local checkout, that's typically:
 
@@ -80,6 +87,14 @@ compile-time `layout_tests`): it round-trips a few kernel-free entry points
 through the real `libpeios`, so it needs the library present and linkable —
 build libpeios, set the env above, add the soname link, then `cargo test`. It
 runs anywhere libpeios links (no Peios kernel required).
+
+With Python 3.11+ and the same three SDK environment variables, run
+`python3 tools/test-sdk-version.py` to check SDK discovery. It uses temporary
+pkg-config fixtures to exercise older, missing, minimum and newer versions,
+plus the explicit override, in both linking modes. Dependencies must already be
+cached (`cargo check --offline`); set `CARGO_TARGET_DIR` to reuse a build cache.
+The newer-version fixture checks version acceptance using the selected SDK's
+headers, not a separately built future SDK.
 
 ## The `uapi` feature
 
