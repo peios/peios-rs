@@ -233,6 +233,8 @@ impl TokenClass {
     pub const INTERACTIVITY_SCOPE: Self = Self(sys::KACS_TOKEN_CLASS_INTERACTIVITY_SCOPE);
     /// The token-statistics class, including the LogonSession `auth_id`.
     pub const STATISTICS: Self = Self(sys::KACS_TOKEN_CLASS_STATISTICS);
+    /// The immutable 16-byte token GUID used by KMES.
+    pub const GUID: Self = Self(sys::KACS_TOKEN_CLASS_GUID);
 }
 
 /// A token's four privilege words.
@@ -411,6 +413,15 @@ impl Token {
     pub fn session_id(&self) -> Result<SessionId> {
         self.interactivity_scope()
             .map(|scope| SessionId(u64::from(scope.0)))
+    }
+
+    /// The immutable token GUID, in the raw byte order used by KMES events.
+    /// Requires token-query access; a derived token has its own GUID.
+    pub fn guid(&self) -> Result<[u8; 16]> {
+        let mut out = [0u8; 16];
+        // SAFETY: live fd; `out` holds 16 writable bytes.
+        check(unsafe { sys::peios_token_guid(self.raw(), out.as_mut_ptr()) })?;
+        Ok(out)
     }
 
     /// Token statistics, including the LogonSession LUID in `auth_id`.
