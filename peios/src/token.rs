@@ -169,9 +169,10 @@ impl ImpersonationLevel {
 
     /// Bound how far this socket's identity may travel when the peer captures
     /// it — the `KACS_SO_IMPERSONATION_LEVEL` socket option. A client sets it
-    /// before `connect()`; the default is [`ImpersonationLevel::Impersonation`],
-    /// and the kernel refuses the change with `EISCONN` once the socket is
-    /// connected.
+    /// before `connect()` to bound the initial capture; the default is
+    /// [`ImpersonationLevel::Impersonation`]. It may also be changed on a
+    /// connected socket: the new level bounds later captures without
+    /// rewriting tokens already captured by the peer.
     pub fn set_on_socket(self, sock: BorrowedFd<'_>) -> Result<()> {
         // SAFETY: `sock` is live for the call.
         check(unsafe {
