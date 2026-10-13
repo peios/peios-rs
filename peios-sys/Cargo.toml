@@ -19,7 +19,7 @@ uapi = ["dep:peios-uapi"]
 [dependencies]
 # Optional: the same generated #[repr(C)] mirror libpeios itself consumes,
 # pinned to the same pkm rev so the kacs_*/pkm types are one identity.
-peios-uapi = { git = "https://github.com/peios/pkm.git", rev = "b5519e6da3ecd4ce854c6299af6844f0a6ce05dd", default-features = false, optional = true }
+peios-uapi = { git = "https://github.com/peios/pkm.git", rev = "c8e323ee29b67efa8d8b9ee1279b5a9fd4168056", default-features = false, optional = true }
 
 [build-dependencies]
 bindgen = "0.70"
