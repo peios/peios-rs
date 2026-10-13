@@ -1,5 +1,34 @@
 use std::{env, path::PathBuf};
 
+/// Reads `package.metadata.libpeios.minimum-version` from this crate's
+/// manifest. A line scan rather than a TOML parser keeps registry crates out of
+/// every SDK consumer's vendored build graph; the table holds one plain key.
+fn required_libpeios_version() -> String {
+    let mut in_table = false;
+    for line in include_str!("Cargo.toml").lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_table = line == "[package.metadata.libpeios]";
+            continue;
+        }
+        if !in_table {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("minimum-version") {
+            let value = rest
+                .trim_start()
+                .strip_prefix('=')
+                .map(str::trim)
+                .and_then(|v| v.strip_prefix('"'))
+                .and_then(|v| v.split('"').next())
+                .filter(|v| !v.is_empty())
+                .expect("package.metadata.libpeios.minimum-version must be a quoted string");
+            return value.to_owned();
+        }
+    }
+    panic!("peios-sys Cargo.toml lacks package.metadata.libpeios.minimum-version");
+}
+
 fn main() {
     // --- 1. Locate libpeios -------------------------------------------------
     // Precedence: explicit env override → pkg-config → give up with guidance.
@@ -7,6 +36,7 @@ fn main() {
     //   PEIOS_INCLUDE = dir containing <peios.h> (the hand-written, shipping API)
     //   PKM_UAPI      = dir containing <pkm/*.h>  (referenced by peios.h signatures)
     let static_link = cfg!(feature = "static");
+    let minimum_version = required_libpeios_version();
 
     let (lib_dir, include_dirs) = if let Ok(dir) = env::var("PEIOS_LIB_DIR") {
         let inc = env::var("PEIOS_INCLUDE").expect("PEIOS_INCLUDE required with PEIOS_LIB_DIR");
@@ -20,11 +50,25 @@ fn main() {
         // the link directives for us, so we only collect include dirs here.
         let lib = pkg_config::Config::new()
             .statik(static_link)
+            .atleast_version(&minimum_version)
             .probe("peios")
-            .expect(
-                "libpeios not found: set PEIOS_LIB_DIR/PEIOS_INCLUDE/PKM_UAPI, \
-                 or install libpeios with a peios.pc on PKG_CONFIG_PATH",
-            );
+            .unwrap_or_else(|error| {
+                // Probe without the floor only to report the installed version.
+                // Do not emit link directives for an incompatible SDK.
+                let detected = pkg_config::Config::new()
+                    .statik(static_link)
+                    .cargo_metadata(false)
+                    .env_metadata(false)
+                    .probe("peios")
+                    .map(|lib| lib.version)
+                    .unwrap_or_else(|_| "not found".to_owned());
+                panic!(
+                    "peios-sys {} requires libpeios >= {minimum_version}; detected: {detected}. \
+                     Install a compatible libpeios SDK and set PKG_CONFIG_PATH to its peios.pc. \
+                     For a manually selected compatible SDK, set PEIOS_LIB_DIR/PEIOS_INCLUDE/PKM_UAPI.\n\n{error}",
+                    env!("CARGO_PKG_VERSION")
+                )
+            });
         (None, lib.include_paths)
     };
 
