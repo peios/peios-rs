@@ -28,4 +28,3 @@ peios-uapi = { git = "https://github.com/peios/pkm.git", rev = "c8e323ee29b67efa
 [build-dependencies]
 bindgen = "0.70"
 pkg-config = "0.3"
-toml = { version = "0.8", default-features = false, features = ["parse"] }
