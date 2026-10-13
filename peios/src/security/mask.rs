@@ -111,7 +111,7 @@ bitflags! {
         /// `SeImpersonatePrivilege`.
         const IMPERSONATE = sys::KACS_SE_IMPERSONATE_PRIVILEGE as u64;
         /// `SeRelabelPrivilege`.
-        const RELABEL = sys::KACS_SE_RELABEL_PRIVILEGE as u64;
+        const RELABEL = sys::KACS_SE_RELABEL_PRIVILEGE;
         /// `SeCreateSymbolicLinkPrivilege`.
         const CREATE_SYMBOLIC_LINK = sys::KACS_SE_CREATE_SYMBOLIC_LINK_PRIVILEGE;
         // Bit 63 was `SeBindPrivilegedPortPrivilege`, retired when port
