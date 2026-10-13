@@ -1,12 +1,32 @@
 use std::{env, path::PathBuf};
 
+/// Reads `package.metadata.libpeios.minimum-version` from this crate's
+/// manifest. A line scan rather than a TOML parser keeps registry crates out of
+/// every SDK consumer's vendored build graph; the table holds one plain key.
 fn required_libpeios_version() -> String {
-    let manifest: toml::Value =
-        toml::from_str(include_str!("Cargo.toml")).expect("parse peios-sys Cargo.toml");
-    manifest["package"]["metadata"]["libpeios"]["minimum-version"]
-        .as_str()
-        .expect("package.metadata.libpeios.minimum-version must be a string")
-        .to_owned()
+    let mut in_table = false;
+    for line in include_str!("Cargo.toml").lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_table = line == "[package.metadata.libpeios]";
+            continue;
+        }
+        if !in_table {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("minimum-version") {
+            let value = rest
+                .trim_start()
+                .strip_prefix('=')
+                .map(str::trim)
+                .and_then(|v| v.strip_prefix('"'))
+                .and_then(|v| v.split('"').next())
+                .filter(|v| !v.is_empty())
+                .expect("package.metadata.libpeios.minimum-version must be a quoted string");
+            return value.to_owned();
+        }
+    }
+    panic!("peios-sys Cargo.toml lacks package.metadata.libpeios.minimum-version");
 }
 
 fn main() {
