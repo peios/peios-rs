@@ -330,7 +330,7 @@ impl fmt::Display for SidRef {
     }
 }
 
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;
 
 /// Raw `(ptr, len)` for passing a borrowed SID to an FFI call expecting
 /// `(const void *, size_t)`.

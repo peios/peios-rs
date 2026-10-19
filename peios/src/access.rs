@@ -23,12 +23,12 @@ use crate::error::{Error, Result};
 use crate::security::{AccessMask, GenericMapping, SecurityDescriptor, SidRef};
 use crate::util::{check, check_len, opt_fd};
 
-/// `EACCES` without pulling in the `libc` crate (stable on Linux): the errno
+/// `EACCES` using the platform definition: the errno
 /// libpeios reports for an access *denial*, which is a decision, not an error.
-const EACCES: i32 = 13;
+const EACCES: i32 = libc::EACCES;
 
 /// `EINVAL`, for a name holding a NUL byte, which no C string can carry.
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;
 
 /// One identifying field's value in an [`AuditContext`]: a scalar in one of
 /// the PGSS §6.5 wire forms.

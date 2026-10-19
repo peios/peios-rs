@@ -22,9 +22,9 @@ use super::{CreateFlags, Data, Disposition, Key, KeyAccess, OpenFlags, Transacti
 use crate::error::{Error, Result};
 use crate::security::{Sid, SidRef};
 
-const EINVAL: i32 = 22;
-const ENOENT: i32 = 2;
-const EEXIST: i32 = 17;
+const EINVAL: i32 = libc::EINVAL;
+const ENOENT: i32 = libc::ENOENT;
+const EEXIST: i32 = libc::EEXIST;
 
 /// The key that holds a key for each layer.
 pub const LAYERS: &str = r"Machine\System\Registry\Layers";

@@ -10,6 +10,10 @@
 //! [`FileAccess`]: crate::file::FileAccess
 //! [`KeyAccess`]: crate::registry::KeyAccess
 
+// bindgen emits small privilege constants as u32; the UAPI feature uses u64.
+// Explicit casts keep the same public bitflags declaration in both modes.
+#![cfg_attr(feature = "uapi", allow(clippy::unnecessary_cast))]
+
 use bitflags::bitflags;
 use peios_sys as sys;
 
@@ -59,6 +63,8 @@ bitflags! {
     /// A set of KACS privileges (`SeCreateTokenPrivilege`, `SeTcbPrivilege`, …),
     /// the 64-bit privilege bitmask carried by a token.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    // bindgen narrows small macros to u32; the canonical UAPI uses u64.
+    // Keep explicit widening in the default build and accept it in both modes.
     pub struct Privileges: u64 {
         /// `SeCreateTokenPrivilege`.
         const CREATE_TOKEN = sys::KACS_SE_CREATE_TOKEN_PRIVILEGE as u64;

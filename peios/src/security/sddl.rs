@@ -22,7 +22,7 @@ use crate::file::SecInfo;
 use crate::util::{probe, probe_str};
 
 /// `EINVAL`, for the interior-NUL rejection on a borrowed `&str`.
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;
 
 /// Parse an SDDL string (e.g. `"O:SYG:BAD:(A;;FA;;;BA)"`) into a security
 /// descriptor.
@@ -115,7 +115,9 @@ pub fn reinherit_with(
     mapping: Option<&GenericMapping>,
     info: SecInfo,
 ) -> Result<SecurityDescriptor> {
-    let mapping = mapping.map_or(std::ptr::null(), |m| &m.0 as *const sys::kacs_generic_mapping);
+    let mapping = mapping.map_or(std::ptr::null(), |m| {
+        &m.0 as *const sys::kacs_generic_mapping
+    });
     let bytes = probe(|buf, cap| unsafe {
         sys::peios_sd_reinherit_ex(
             buf,
@@ -165,14 +167,18 @@ mod tests {
     #[test]
     fn reinherit_and_strip_produce_descriptors() {
         let sd = parse("O:SYG:BAD:(A;;FA;;;BA)").unwrap();
-        assert!(!reinherit(sd.as_bytes(), sd.as_bytes(), true)
-            .unwrap()
-            .as_bytes()
-            .is_empty());
-        assert!(!strip_inherited(sd.as_bytes(), SecInfo::DACL)
-            .unwrap()
-            .as_bytes()
-            .is_empty());
+        assert!(
+            !reinherit(sd.as_bytes(), sd.as_bytes(), true)
+                .unwrap()
+                .as_bytes()
+                .is_empty()
+        );
+        assert!(
+            !strip_inherited(sd.as_bytes(), SecInfo::DACL)
+                .unwrap()
+                .as_bytes()
+                .is_empty()
+        );
     }
 
     /// CREATOR OWNER resolves to the child's owner and carries on, generic
@@ -182,10 +188,23 @@ mod tests {
         let parent = parse("O:BAG:BAD:(A;OICIIO;GA;;;CO)S:(AU;OICISA;FA;;;WD)").unwrap();
         let child = parse("O:SYG:SYD:S:P").unwrap();
         let file = GenericMapping::new(0x120089, 0x120116, 0x1200a0, 0x1f01ff);
-        let got = reinherit_with(parent.as_bytes(), child.as_bytes(), true, Some(&file), SecInfo::DACL | SecInfo::SACL).unwrap();
+        let got = reinherit_with(
+            parent.as_bytes(),
+            child.as_bytes(),
+            true,
+            Some(&file),
+            SecInfo::DACL | SecInfo::SACL,
+        )
+        .unwrap();
         let text = format(got.as_bytes()).unwrap();
-        assert!(text.contains("(A;ID;FA;;;SY)(A;CIOIIOID;GA;;;CO)"), "got {text:?}");
-        assert!(text.contains("S:P") && !text.contains(";WD)"), "the SACL is protected: {text:?}");
+        assert!(
+            text.contains("(A;ID;FA;;;SY)(A;CIOIIOID;GA;;;CO)"),
+            "got {text:?}"
+        );
+        assert!(
+            text.contains("S:P") && !text.contains(";WD)"),
+            "the SACL is protected: {text:?}"
+        );
     }
 
     #[test]
@@ -242,12 +261,16 @@ mod tests {
             allow.mask(),
             crate::security::AccessMask::GENERIC_ALL.bits()
         );
-        assert!(allow
-            .flags()
-            .contains(crate::security::AceFlags::OBJECT_INHERIT));
-        assert!(allow
-            .flags()
-            .contains(crate::security::AceFlags::CONTAINER_INHERIT));
+        assert!(
+            allow
+                .flags()
+                .contains(crate::security::AceFlags::OBJECT_INHERIT)
+        );
+        assert!(
+            allow
+                .flags()
+                .contains(crate::security::AceFlags::CONTAINER_INHERIT)
+        );
 
         let deny = view.ace(1).expect("the deny ACE");
         assert_eq!(

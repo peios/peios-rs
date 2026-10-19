@@ -34,9 +34,9 @@ mod data;
 pub mod layers;
 pub use data::Data;
 
-const EINVAL: i32 = 22;
-const ENOENT: i32 = 2;
-const ERANGE: i32 = 34;
+const EINVAL: i32 = libc::EINVAL;
+const ENOENT: i32 = libc::ENOENT;
+const ERANGE: i32 = libc::ERANGE;
 
 const WATCH_EVENT_MIN_SIZE: usize = 8;
 const SUBTREE_WATCH_EVENT_DEPTH_LEN: usize = 2;
@@ -1271,6 +1271,77 @@ impl Iterator for Subkeys<'_> {
     }
 }
 
+impl Transaction {
+    /// Borrow this transaction's fd (private helper for the `opt_fd` sites).
+    #[inline]
+    fn as_fd_borrow(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+
+/// `(ptr, u32 len)` for a byte slice, casting the pointer to `c_void`.
+#[inline]
+fn bytes_u32(b: &[u8]) -> (*const c_void, u32) {
+    (b.as_ptr().cast(), b.len() as u32)
+}
+
+/// A mutable `c_void` buffer pointer that is genuinely NULL when the buffer is
+/// empty, so a zero-capacity descriptor field truly probes (the libpeios
+/// convention is a NULL buffer with zero capacity).
+#[inline]
+fn buf_ptr(b: &mut [u8]) -> *mut c_void {
+    if b.is_empty() {
+        core::ptr::null_mut()
+    } else {
+        b.as_mut_ptr().cast()
+    }
+}
+
+/// `(ptr, u32 len)` for an optional layer name — `(NULL, 0)` for the base layer.
+/// A `c_char` pointer is fine here: libpeios reads `layer_len` bytes regardless.
+#[inline]
+fn opt_layer(layer: Option<&str>) -> (*const c_void, u32) {
+    match layer {
+        Some(l) => (l.as_ptr() as *const c_char as *const c_void, l.len() as u32),
+        None => (core::ptr::null(), 0),
+    }
+}
+
+/// Parse `count` packed `[name_len u32][name][type u32][data_len u32][data]`
+/// records (little-endian) from `buf` into owned [`ValueRecord`]s.
+fn parse_value_records(buf: &[u8], count: usize) -> Result<Vec<ValueRecord>> {
+    let mut out = Vec::with_capacity(count);
+    let mut pos = 0usize;
+    let read_u32 = |buf: &[u8], pos: usize| -> Result<u32> {
+        let end = pos.checked_add(4).filter(|&e| e <= buf.len());
+        match end {
+            Some(e) => Ok(u32::from_le_bytes(buf[pos..e].try_into().unwrap())),
+            None => Err(Error::from_raw_os_error(EINVAL)),
+        }
+    };
+    for _ in 0..count {
+        let name_len = read_u32(buf, pos)? as usize;
+        pos += 4;
+        let name_end = pos.checked_add(name_len).filter(|&e| e <= buf.len());
+        let name_end = name_end.ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+        let name = buf[pos..name_end].to_vec();
+        pos = name_end;
+
+        let ty = ValueType(read_u32(buf, pos)?);
+        pos += 4;
+
+        let data_len = read_u32(buf, pos)? as usize;
+        pos += 4;
+        let data_end = pos.checked_add(data_len).filter(|&e| e <= buf.len());
+        let data_end = data_end.ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
+        let data = buf[pos..data_end].to_vec();
+        pos = data_end;
+
+        out.push(ValueRecord { name, ty, data });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_watch_events, Error, WatchEvent, WatchEventType};
@@ -1351,75 +1422,4 @@ mod tests {
         bytes[0..4].copy_from_slice(&total_len.to_le_bytes());
         bytes
     }
-}
-
-impl Transaction {
-    /// Borrow this transaction's fd (private helper for the `opt_fd` sites).
-    #[inline]
-    fn as_fd_borrow(&self) -> BorrowedFd<'_> {
-        self.0.as_fd()
-    }
-}
-
-/// `(ptr, u32 len)` for a byte slice, casting the pointer to `c_void`.
-#[inline]
-fn bytes_u32(b: &[u8]) -> (*const c_void, u32) {
-    (b.as_ptr().cast(), b.len() as u32)
-}
-
-/// A mutable `c_void` buffer pointer that is genuinely NULL when the buffer is
-/// empty, so a zero-capacity descriptor field truly probes (the libpeios
-/// convention is a NULL buffer with zero capacity).
-#[inline]
-fn buf_ptr(b: &mut [u8]) -> *mut c_void {
-    if b.is_empty() {
-        core::ptr::null_mut()
-    } else {
-        b.as_mut_ptr().cast()
-    }
-}
-
-/// `(ptr, u32 len)` for an optional layer name — `(NULL, 0)` for the base layer.
-/// A `c_char` pointer is fine here: libpeios reads `layer_len` bytes regardless.
-#[inline]
-fn opt_layer(layer: Option<&str>) -> (*const c_void, u32) {
-    match layer {
-        Some(l) => (l.as_ptr() as *const c_char as *const c_void, l.len() as u32),
-        None => (core::ptr::null(), 0),
-    }
-}
-
-/// Parse `count` packed `[name_len u32][name][type u32][data_len u32][data]`
-/// records (little-endian) from `buf` into owned [`ValueRecord`]s.
-fn parse_value_records(buf: &[u8], count: usize) -> Result<Vec<ValueRecord>> {
-    let mut out = Vec::with_capacity(count);
-    let mut pos = 0usize;
-    let read_u32 = |buf: &[u8], pos: usize| -> Result<u32> {
-        let end = pos.checked_add(4).filter(|&e| e <= buf.len());
-        match end {
-            Some(e) => Ok(u32::from_le_bytes(buf[pos..e].try_into().unwrap())),
-            None => Err(Error::from_raw_os_error(EINVAL)),
-        }
-    };
-    for _ in 0..count {
-        let name_len = read_u32(buf, pos)? as usize;
-        pos += 4;
-        let name_end = pos.checked_add(name_len).filter(|&e| e <= buf.len());
-        let name_end = name_end.ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
-        let name = buf[pos..name_end].to_vec();
-        pos = name_end;
-
-        let ty = ValueType(read_u32(buf, pos)?);
-        pos += 4;
-
-        let data_len = read_u32(buf, pos)? as usize;
-        pos += 4;
-        let data_end = pos.checked_add(data_len).filter(|&e| e <= buf.len());
-        let data_end = data_end.ok_or_else(|| Error::from_raw_os_error(EINVAL))?;
-        let data = buf[pos..data_end].to_vec();
-        pos = data_end;
-
-        out.push(ValueRecord { name, ty, data });
-    }
-    Ok(out)
 }

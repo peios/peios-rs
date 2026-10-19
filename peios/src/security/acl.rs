@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::util::probe;
 
 /// `EINVAL`, for an ACL whose own view cannot produce an entry it counted.
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;
 
 /// The type discriminant of an ACE.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

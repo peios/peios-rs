@@ -370,4 +370,4 @@ pub fn validate(buf: &[u8], max_depth: u32) -> Result<()> {
     check(unsafe { sys::peios_mp_validate(buf.as_ptr().cast(), buf.len(), max_depth) })
 }
 
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;

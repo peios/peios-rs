@@ -604,9 +604,9 @@ impl IntoRawFd for File {
     }
 }
 
-/// `AT_SYMLINK_NOFOLLOW`, without pulling in the `libc` crate.
+/// `AT_SYMLINK_NOFOLLOW`, using the platform definition.
 const AT_SYMLINK_NOFOLLOW: u32 = 0x100;
-/// `ERANGE`, without pulling in the `libc` crate (stable on Linux).
-const ERANGE: i32 = 34;
-/// `EINVAL`, without pulling in the `libc` crate.
-const EINVAL: i32 = 22;
+/// `ERANGE`, using the platform definition.
+const ERANGE: i32 = libc::ERANGE;
+/// `EINVAL`, using the platform definition.
+const EINVAL: i32 = libc::EINVAL;

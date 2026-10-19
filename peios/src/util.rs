@@ -107,6 +107,6 @@ where
     Err(Error::from_raw_os_error(ERANGE))
 }
 
-/// `ERANGE` / `EINVAL` without pulling in the `libc` crate (stable on Linux).
-const ERANGE: i32 = 34;
-const EINVAL: i32 = 22;
+/// `ERANGE` / `EINVAL` using the platform definition.
+const ERANGE: i32 = libc::ERANGE;
+const EINVAL: i32 = libc::EINVAL;
