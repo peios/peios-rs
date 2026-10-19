@@ -11,7 +11,7 @@ build = "build.rs"
 
 # Minimum C SDK consumed by this crate; build.rs enforces it for pkg-config.
 [package.metadata.libpeios]
-minimum-version = "0.5.11"
+minimum-version = "0.5.12"
 
 [features]
 default = []           # → dynamic link against libpeios.so
@@ -23,7 +23,7 @@ uapi = ["dep:peios-uapi"]
 [dependencies]
 # Optional: the same generated #[repr(C)] mirror libpeios itself consumes,
 # pinned to the same pkm rev so the kacs_*/pkm types are one identity.
-peios-uapi = { git = "https://github.com/peios/pkm.git", rev = "c8e323ee29b67efa8d8b9ee1279b5a9fd4168056", default-features = false, optional = true }
+peios-uapi = { path = "../vendor/kernel/peios/rust/peios-uapi", default-features = false, optional = true }
 
 [build-dependencies]
 bindgen = "0.70"

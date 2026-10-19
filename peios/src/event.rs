@@ -15,10 +15,8 @@
 //! and the low-level [`EventRing`], for callers that drive the read position and
 //! the empty / lapping / generation checks themselves.
 //!
-//! An [`Event`]'s header is copied by value, but its `event_type` and `payload`
-//! borrow the ring mapping and are valid only until the next read — so the
-//! readers hand them out as a *lending* borrow tied to `&mut self` / `&self`
-//! rather than via [`Iterator`]. Copy out what you need before continuing.
+//! Each [`Event`] owns its header, UTF-8 event type and payload. Its contents
+//! remain valid after subsequent reads, ring overwrites and reader closure.
 
 use core::ffi::{c_char, c_void};
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -70,14 +68,15 @@ pub struct EmitEntry<'a> {
 /// non-empty); `payload` is one well-formed MessagePack value. Requires
 /// `SeAuditPrivilege`.
 pub fn emit(event_type: &str, payload: &[u8]) -> Result<()> {
+    let (type_len, payload_len) = event_lengths(event_type.len(), payload.len())?;
     // SAFETY: (ptr, len) from live slices; `event_type` is passed length-counted
     // (not NUL-terminated), `payload` as raw bytes.
     check(unsafe {
         sys::peios_event_emit(
             event_type.as_ptr().cast::<c_char>(),
-            event_type.len() as u16,
+            type_len,
             payload.as_ptr().cast::<c_void>(),
-            payload.len() as u32,
+            payload_len,
         )
     })
 }
@@ -90,24 +89,35 @@ pub fn emit(event_type: &str, payload: &[u8]) -> Result<()> {
 /// is how many preceded it. Rate-limiting is all-or-nothing (an `EAGAIN` emits
 /// none). Requires `SeAuditPrivilege`.
 pub fn emit_batch(entries: &[EmitEntry<'_>]) -> Result<usize> {
+    let count = u32::try_from(entries.len()).map_err(|_| Error::from_raw_os_error(EINVAL))?;
     let raw: Vec<sys::peios_event_entry> = entries
         .iter()
-        .map(|e| sys::peios_event_entry {
-            event_type: e.event_type.as_ptr().cast::<c_char>(),
-            event_type_len: e.event_type.len() as u16,
-            payload: e.payload.as_ptr().cast::<c_void>(),
-            payload_len: e.payload.len() as u32,
+        .map(|entry| {
+            let (event_type_len, payload_len) =
+                event_lengths(entry.event_type.len(), entry.payload.len())?;
+            Ok(sys::peios_event_entry {
+                event_type: entry.event_type.as_ptr().cast::<c_char>(),
+                event_type_len,
+                payload: entry.payload.as_ptr().cast::<c_void>(),
+                payload_len,
+            })
         })
-        .collect();
+        .collect::<Result<_>>()?;
     let mut emitted = 0u32;
     // SAFETY: `raw` borrows the live entry slices for the call; `emitted` is
     // writable and receives the count regardless of success or failure.
-    let r = unsafe { sys::peios_event_emit_batch(raw.as_ptr(), raw.len() as u32, &mut emitted) };
+    let r = unsafe { sys::peios_event_emit_batch(raw.as_ptr(), count, &mut emitted) };
     if r == 0 {
         Ok(emitted as usize)
     } else {
         Err(Error::last_os_error())
     }
+}
+
+fn event_lengths(type_len: usize, payload_len: usize) -> Result<(u16, u32)> {
+    let type_len = u16::try_from(type_len).map_err(|_| Error::from_raw_os_error(EINVAL))?;
+    let payload_len = u32::try_from(payload_len).map_err(|_| Error::from_raw_os_error(EINVAL))?;
+    Ok((type_len, payload_len))
 }
 
 /// An event type's tier (PGSS §6.8): what the emission policy decides when
@@ -172,8 +182,7 @@ impl EventPolicy {
     /// (`EINVAL`: a malformed type, or one longer than 65535 bytes); registry
     /// trouble falls back to the tier.
     pub fn enabled(&self, event_type: &str, tier: Tier) -> Result<bool> {
-        let len = u16::try_from(event_type.len())
-            .map_err(|_| Error::from_raw_os_error(EINVAL))?;
+        let len = u16::try_from(event_type.len()).map_err(|_| Error::from_raw_os_error(EINVAL))?;
         let raw = self.raw.lock().unwrap_or_else(|e| e.into_inner());
         // SAFETY: a live handle, used under the lock; (ptr, len) from a live str.
         let r = unsafe {
@@ -222,12 +231,10 @@ impl std::fmt::Debug for EventPolicy {
 
 /// A parsed event.
 ///
-/// The kernel-stamped header is held by value; `event_type` and `payload` borrow
-/// the ring mapping (`'a`) and are valid only until the next read — copy out what
-/// you need before draining further. `payload` is a MessagePack value (decode it
-/// with [`crate::msgpack`]).
-#[derive(Debug, Clone, Copy)]
-pub struct Event<'a> {
+/// All fields are owned, so later reads and ring overwrites cannot change them.
+/// `payload` is a MessagePack value; decode it with [`crate::msgpack`].
+#[derive(Debug, Clone)]
+pub struct Event {
     /// Nanoseconds since the Unix epoch (`CLOCK_REALTIME`).
     pub timestamp: u64,
     /// Per-CPU, per-boot monotonic sequence (a gap signals lost events).
@@ -242,33 +249,27 @@ pub struct Event<'a> {
     pub true_token_guid: [u8; 16],
     /// The originating process's identity GUID.
     pub process_guid: [u8; 16],
-    /// The event kind, borrowing the ring mapping.
-    pub event_type: &'a str,
-    /// The MessagePack payload bytes, borrowing the ring mapping.
-    pub payload: &'a [u8],
+    /// The owned UTF-8 event kind.
+    pub event_type: String,
+    /// The owned MessagePack payload bytes.
+    pub payload: Vec<u8>,
 }
 
-impl<'a> Event<'a> {
-    /// Build an [`Event`] from a populated `peios_event` out-struct, tying its
-    /// borrowed `event_type` / `payload` to the lifetime `'a`.
+impl Event {
+    /// Copy the fields and data from a validated C event view.
     ///
     /// # Safety
-    ///
-    /// `raw` must be a `peios_event` filled by libpeios whose `event_type` /
-    /// `payload` pointers reference a mapping that outlives `'a` and is not
-    /// advanced over for the duration of `'a`.
-    unsafe fn from_raw(raw: &sys::peios_event) -> Result<Event<'a>> {
-        // SAFETY (caller contract): (ptr, len) name `event_type_len` bytes inside
-        // the live ring mapping borrowed for 'a.
-        let type_bytes = unsafe {
-            core::slice::from_raw_parts(raw.event_type.cast::<u8>(), raw.event_type_len as usize)
-        };
+    /// Both pointer ranges must stay readable until this function returns.
+    /// For a live mapping, callers must reject the result if the producer
+    /// overwrites its slot or changes the generation during the copy.
+    unsafe fn from_raw(raw: &sys::peios_event) -> Result<Event> {
+        // Read through raw pointers: low-level events still reference memory
+        // that the kernel may overwrite. Validation is over the owned copy.
+        let type_bytes =
+            unsafe { copy_event_bytes(raw.event_type.cast(), raw.event_type_len as usize) };
         let event_type =
-            core::str::from_utf8(type_bytes).map_err(|_| Error::from_raw_os_error(EINVAL))?;
-        // SAFETY (caller contract): `payload_len` bytes inside the live mapping.
-        let payload = unsafe {
-            core::slice::from_raw_parts(raw.payload.cast::<u8>(), raw.payload_len as usize)
-        };
+            String::from_utf8(type_bytes).map_err(|_| Error::from_raw_os_error(EINVAL))?;
+        let payload = unsafe { copy_event_bytes(raw.payload.cast(), raw.payload_len as usize) };
         Ok(Event {
             timestamp: raw.timestamp,
             sequence: raw.sequence,
@@ -281,6 +282,19 @@ impl<'a> Event<'a> {
             payload,
         })
     }
+}
+
+/// Copy externally mutable bytes without creating references to them.
+///
+/// # Safety
+/// `source` must remain readable for `length` bytes throughout this call.
+unsafe fn copy_event_bytes(source: *const u8, length: usize) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(length);
+    for offset in 0..length {
+        // SAFETY: the caller guarantees the mapped or reader-owned range.
+        bytes.push(unsafe { source.add(offset).read_volatile() });
+    }
+    bytes
 }
 
 /// An all-zero `peios_event` to fill as a `next` / `event_at` out-param.
@@ -308,8 +322,8 @@ pub struct EventReader {
 }
 
 impl EventReader {
-    /// Attach to CPU `cpu_id` and map its ring, ready to drain. Discover the CPU
-    /// count by counting up from `0` until this fails with `EINVAL`. Requires
+    /// Attach to CPU `cpu_id` and map its ring, ready to drain. CPU slots can
+    /// contain holes; an `EINVAL` does not mark the end of the slot range. Requires
     /// `SeSecurityPrivilege`.
     pub fn open(cpu_id: u32) -> Result<EventReader> {
         // SAFETY: a plain call returning an owned reader or NULL/errno.
@@ -324,22 +338,18 @@ impl EventReader {
     /// Fetch the next event, or `Ok(None)` if none is available right now
     /// (consider [`wait`](Self::wait) then).
     ///
-    /// The returned [`Event`] borrows `&mut self`: its `event_type` / `payload`
-    /// point into the reader's ring and stay valid only until the next call, so
-    /// this is a lending borrow rather than an [`Iterator`].
-    // The lending borrow makes `Iterator` impossible, so `next` is an inherent
-    // cursor method by design — the std-trait-confusion lint does not apply.
+    /// The returned event owns its data and survives later reads or closure.
+    // None means temporarily empty, so this cursor is not a fused iterator.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Result<Option<Event<'_>>> {
+    pub fn next(&mut self) -> Result<Option<Event>> {
         let mut out = zeroed_event();
         // SAFETY: live reader; `out` is a writable out-param.
         let r = unsafe { sys::peios_event_reader_next(self.raw, &mut out) };
         match r {
             1 => {
-                // SAFETY: libpeios filled `out` with pointers into this reader's
-                // ring mapping, valid until the next call — and the returned
-                // Event borrows `&mut self`, which forbids that next call until
-                // it is dropped.
+                // SAFETY: libpeios 0.5.12 stores a validated snapshot in the
+                // reader, unchanged until its next read. Exclusive access here
+                // prevents another read while we make the Rust-owned copy.
                 Ok(Some(unsafe { Event::from_raw(&out) }?))
             }
             0 => Ok(None),
@@ -377,8 +387,8 @@ impl Drop for EventReader {
 
 /// Attach to CPU `cpu_id`'s ring buffer for the low-level path.
 ///
-/// Returns the ring fd and the data-region capacity. Discover the CPU count by
-/// counting up from `0` until this fails with `EINVAL`. Requires
+/// Returns the ring fd and data-region capacity. CPU slots can contain holes;
+/// use the raw `peios_sys::peios_event_slot_count` bound when enumerating. Requires
 /// `SeSecurityPrivilege`. Map the returned fd with [`EventRing::map`].
 pub fn attach(cpu_id: u32) -> Result<(OwnedFd, u64)> {
     let mut capacity = 0u64;
@@ -447,19 +457,33 @@ impl EventRing {
     /// `read_pos` by that size). The caller must have confirmed `read_pos` is in
     /// `[tail_pos, write_pos)`.
     ///
-    /// The returned [`Event`] borrows the ring mapping (`&self`), so it is a
-    /// lending borrow: copy out what you need before advancing past the slot.
-    pub fn event_at(&self, read_pos: u64) -> Result<(Event<'_>, usize)> {
-        let mut out = zeroed_event();
-        // SAFETY: `raw` is a mapped ring; `out` is a writable out-param.
-        let n = unsafe { sys::peios_event_ring_event_at(&self.raw, read_pos, &mut out) };
-        if n < 0 {
-            return Err(Error::last_os_error());
+    /// Returns an owned snapshot. Empty, overwritten or resized slots return
+    /// `EAGAIN`; a generation change requires remapping the ring.
+    pub fn event_at(&self, read_pos: u64) -> Result<(Event, usize)> {
+        let generation = self.generation();
+        let write = self.write_pos();
+        if read_pos < self.tail_pos() || read_pos >= write {
+            return Err(Error::from_raw_os_error(libc::EAGAIN));
         }
-        // SAFETY: libpeios filled `out` with pointers into this ring's mapping;
-        // the returned Event borrows `&self`, which keeps the mapping alive.
-        let event = unsafe { Event::from_raw(&out) }?;
-        Ok((event, n as usize))
+        let mut out = zeroed_event();
+        // SAFETY: live mapping and writable output; libpeios bounds-checks
+        // pointers using a local header copy rather than shared references.
+        let size = unsafe { sys::peios_event_ring_event_at(&self.raw, read_pos, &mut out) };
+        let event = if size < 0 {
+            Err(Error::last_os_error())
+        } else if size as u64 > write - read_pos {
+            Err(Error::from_raw_os_error(EINVAL))
+        } else {
+            // SAFETY: the mapping stays live and libpeios validated both ranges.
+            // Kernel writes do not invalidate the allocation; copy with raw reads.
+            unsafe { Event::from_raw(&out) }
+        };
+        std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire);
+        if self.tail_pos() > read_pos || self.generation() != generation {
+            return Err(Error::from_raw_os_error(libc::EAGAIN));
+        }
+        let event = event?;
+        Ok((event, size as usize))
     }
 
     /// Futex-wait until events past `read_pos` may be available or `timeout_ms`
@@ -484,7 +508,7 @@ impl Drop for EventRing {
     }
 }
 
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;
 
 #[cfg(test)]
 mod tests {
@@ -542,6 +566,40 @@ mod tests {
             .collect();
         for h in handles {
             h.join().unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
+mod length_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_oversized_names_before_entering_the_kernel() {
+        let name = "a".repeat(usize::from(u16::MAX) + 1);
+        assert_eq!(
+            emit(&name, &[0xc0]).unwrap_err().raw_os_error(),
+            Some(EINVAL)
+        );
+        let entries = [EmitEntry {
+            event_type: &name,
+            payload: &[0xc0],
+        }];
+        assert_eq!(
+            emit_batch(&entries).unwrap_err().raw_os_error(),
+            Some(EINVAL)
+        );
+    }
+
+    #[test]
+    fn length_boundaries_match_the_c_abi() {
+        assert_eq!(
+            event_lengths(u16::MAX as usize, u32::MAX as usize).unwrap(),
+            (u16::MAX, u32::MAX)
+        );
+        assert!(event_lengths(u16::MAX as usize + 1, 0).is_err());
+        if usize::BITS > 32 {
+            assert!(event_lengths(1, u32::MAX as usize + 1).is_err());
         }
     }
 }
