@@ -1,0 +1,9 @@
+{
+    "source_root": "learn-staging",
+    "files": [
+        {
+            "source": "peios.product/4--developing-for-peios.antho/300--the-sdk.shelf/100--sdk-basics.topic/400--using-the-sdk-from-rust.md",
+            "sha256": "2cf18c1e41de656350612a9022022f7fa0cb0e420070db1f99da5e2319ee3b00"
+        }
+    ]
+}
