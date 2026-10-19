@@ -84,5 +84,5 @@ rerun host, differential, and native checks. Do not format vendored inputs.
 Use `tools/prepare-style-tools.py` with an output directory outside the repository.
 Set `PEIOS_STYLE_BIN` to that directory, then run `tools/check`.
 Set `TRAIL` to the maintained Trail executable and run `tools/check-docs`.
-The optional `--context ../panorama/docs` check validates publication links
+The optional `--context ../learn` check validates publication links
 against the complete merged documentation tree.
