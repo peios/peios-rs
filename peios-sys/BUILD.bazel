@@ -1,0 +1,109 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//build:checks.bzl", "shared_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+cargo_build_script(
+    name = "build-script",
+    srcs = ["build.rs"],
+    build_script_env = {"PEIOS_BAZEL_SDK_ROOT": "$(execpath @peios_sdk//:root)"},
+    compile_data = ["Cargo.toml"],
+    data = [
+        "@peios_sdk//:files",
+        "@peios_sdk//:root",
+    ],
+    edition = "2021",
+    version = "0.3.0",
+    deps = [
+        "@crates//:bindgen",
+        "@crates//:pkg-config",
+    ],
+)
+
+rust_library(
+    name = "peios-sys",
+    srcs = ["src/lib.rs"],
+    crate_name = "peios_sys",
+    edition = "2021",
+    link_deps = ["@peios_sdk//:peios"],
+    version = "0.3.0",
+    deps = [":build-script"],
+)
+
+rust_test(
+    name = "unit-binary",
+    crate = ":peios-sys",
+    tags = ["manual"],
+)
+
+shared_test(
+    name = "unit-tests",
+    binary = ":unit-binary",
+    libraries = ["@peios_sdk//:library"],
+)
+
+rust_test(
+    name = "smoke-binary",
+    srcs = ["tests/smoke.rs"],
+    edition = "2021",
+    tags = ["manual"],
+    deps = [":peios-sys"],
+)
+
+shared_test(
+    name = "smoke-tests",
+    binary = ":smoke-binary",
+    libraries = ["@peios_sdk//:library"],
+)
+
+cargo_build_script(
+    name = "uapi-build-script",
+    srcs = ["build.rs"],
+    build_script_env = {"PEIOS_BAZEL_SDK_ROOT": "$(execpath @peios_sdk//:root)"},
+    compile_data = ["Cargo.toml"],
+    crate_features = ["uapi"],
+    data = [
+        "@peios_sdk//:files",
+        "@peios_sdk//:root",
+    ],
+    edition = "2021",
+    version = "0.3.0",
+    deps = [
+        "@crates//:bindgen",
+        "@crates//:pkg-config",
+    ],
+)
+
+rust_library(
+    name = "uapi",
+    srcs = ["src/lib.rs"],
+    crate_features = ["uapi"],
+    crate_name = "peios_sys",
+    edition = "2021",
+    link_deps = ["@peios_sdk//:peios"],
+    version = "0.3.0",
+    deps = [
+        ":uapi-build-script",
+        "//vendor:peios-uapi",
+    ],
+)
+
+rust_test(
+    name = "uapi-test-binary",
+    crate = ":uapi",
+    tags = ["manual"],
+)
+
+shared_test(
+    name = "uapi-tests",
+    binary = ":uapi-test-binary",
+    libraries = ["@peios_sdk//:library"],
+)

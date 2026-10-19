@@ -29,16 +29,16 @@ fn required_libpeios_version() -> String {
     panic!("peios-sys Cargo.toml lacks package.metadata.libpeios.minimum-version");
 }
 
-fn main() {
-    // --- 1. Locate libpeios -------------------------------------------------
-    // Precedence: explicit env override → pkg-config → give up with guidance.
-    //   PEIOS_LIB_DIR = dir containing libpeios.{so,a}
-    //   PEIOS_INCLUDE = dir containing <peios.h> (the hand-written, shipping API)
-    //   PKM_UAPI      = dir containing <pkm/*.h>  (referenced by peios.h signatures)
-    let static_link = cfg!(feature = "static");
-    let minimum_version = required_libpeios_version();
-
-    let (lib_dir, include_dirs) = if let Ok(dir) = env::var("PEIOS_LIB_DIR") {
+fn locate_sdk(
+    static_link: bool,
+    minimum_version: &str,
+    bazel_sdk: &Option<std::ffi::OsString>,
+) -> (Option<PathBuf>, Vec<PathBuf>) {
+    if let Some(marker) = bazel_sdk {
+        let marker = PathBuf::from(marker);
+        let sdk = marker.parent().expect("SDK marker directory");
+        (Some(sdk.join("lib")), vec![sdk.join("include")])
+    } else if let Ok(dir) = env::var("PEIOS_LIB_DIR") {
         let inc = env::var("PEIOS_INCLUDE").expect("PEIOS_INCLUDE required with PEIOS_LIB_DIR");
         let uapi = env::var("PKM_UAPI").expect("PKM_UAPI required with PEIOS_LIB_DIR");
         (
@@ -50,7 +50,7 @@ fn main() {
         // the link directives for us, so we only collect include dirs here.
         let lib = pkg_config::Config::new()
             .statik(static_link)
-            .atleast_version(&minimum_version)
+            .atleast_version(minimum_version)
             .probe("peios")
             .unwrap_or_else(|error| {
                 // Probe without the floor only to report the installed version.
@@ -70,24 +70,23 @@ fn main() {
                 )
             });
         (None, lib.include_paths)
-    };
+    }
+}
 
-    // --- 2. Link directives -------------------------------------------------
-    // (pkg-config already emitted these when we went down that branch.)
-    if let Some(dir) = &lib_dir {
+fn link_sdk(lib_dir: &Option<PathBuf>, static_link: bool, bazel: bool) {
+    if let Some(dir) = lib_dir {
         println!("cargo:rustc-link-search=native={}", dir.display());
         let kind = if static_link { "static" } else { "dylib" };
         println!("cargo:rustc-link-lib={kind}=peios");
         // For dynamic dev builds with no installed .so yet, bake an rpath so the
         // test binary finds it. Drop this once libpeios lives on the system path.
-        if !static_link {
+        if !static_link && !bazel {
             println!("cargo:rustc-link-arg=-Wl,-rpath,{}", dir.display());
         }
     }
+}
 
-    // --- 3. Generate bindings from the hand-written headers -----------------
-    // <peios.h> is the shipping API (verify-abi.sh proves it == the Rust ABI),
-    // so it — not abi/peios-abi.h — is what we bind.
+fn bindings(include_dirs: &[PathBuf], bazel: bool) -> bindgen::Builder {
     let mut builder = bindgen::Builder::default()
         .header_contents("wrapper.h", "#include <peios.h>")
         // libpeios' own surface: the peios_* functions/types and the libpeios-
@@ -113,7 +112,22 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .use_core();
 
-    for inc in &include_dirs {
+    if bazel {
+        let compiler = std::process::Command::new("cc")
+            .arg("-print-file-name=include")
+            .output()
+            .expect("locate C compiler builtin headers");
+        assert!(
+            compiler.status.success(),
+            "locate C compiler builtin headers"
+        );
+        builder = builder.clang_arg("-isystem").clang_arg(
+            String::from_utf8(compiler.stdout)
+                .expect("C compiler header path")
+                .trim(),
+        );
+    }
+    for inc in include_dirs {
         builder = builder.clang_arg(format!("-I{}", inc.display()));
     }
 
@@ -137,6 +151,16 @@ fn main() {
             .raw_line("pub use peios_uapi::*;");
     }
 
+    builder
+}
+
+fn main() {
+    let static_link = cfg!(feature = "static");
+    let minimum_version = required_libpeios_version();
+    let bazel_sdk = env::var_os("PEIOS_BAZEL_SDK_ROOT");
+    let (lib_dir, include_dirs) = locate_sdk(static_link, &minimum_version, &bazel_sdk);
+    link_sdk(&lib_dir, static_link, bazel_sdk.is_some());
+    let builder = bindings(&include_dirs, bazel_sdk.is_some());
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     builder
         .generate()
@@ -144,6 +168,7 @@ fn main() {
         .write_to_file(out.join("bindings.rs"))
         .expect("write bindings.rs");
 
+    println!("cargo:rerun-if-env-changed=PEIOS_BAZEL_SDK_ROOT");
     println!("cargo:rerun-if-env-changed=PEIOS_LIB_DIR");
     println!("cargo:rerun-if-env-changed=PEIOS_INCLUDE");
     println!("cargo:rerun-if-env-changed=PKM_UAPI");

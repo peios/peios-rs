@@ -7,11 +7,10 @@ set with CARGO_TARGET_DIR; temporary pkg-config files are removed automatically.
 """
 
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import tomllib
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = tomllib.loads((ROOT / "peios-sys/Cargo.toml").read_text())
@@ -24,7 +23,9 @@ CRATE_VERSION = MANIFEST["package"]["version"]
 SDK = {key: os.environ[key] for key in ("PEIOS_LIB_DIR", "PEIOS_INCLUDE", "PKM_UAPI")}
 
 
-def check(directory, label, version, static=False, override=False):
+def check(
+    directory: Path, label: str, version: str | None, static: bool = False, override: bool = False
+) -> None:
     """Run Cargo, and check rejection happens before binding generation."""
     pc_dir = directory / label
     pc_dir.mkdir()
@@ -67,7 +68,7 @@ def check(directory, label, version, static=False, override=False):
         print(message, flush=True)
 
 
-def main():
+def main() -> None:
     major, minor, patch = map(int, FLOOR.split("."))
     newer = f"{major}.{minor}.{patch + 1}"
     with tempfile.TemporaryDirectory(prefix="peios-sdk-version-") as temporary:
