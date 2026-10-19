@@ -74,9 +74,9 @@ pub fn recv_message(
     max_fds: usize,
     flags: i32,
 ) -> Result<ReceivedMessage> {
-    let mut raw_fds: Vec<i32> = vec![-1; max_fds];
     let fd_cap =
         u32::try_from(max_fds).map_err(|_| crate::Error::from_raw_os_error(libc::EINVAL))?;
+    let mut raw_fds: Vec<i32> = vec![-1; max_fds];
     let mut msg = sys::peios_socket_message {
         token_fd: -1,
         fds: raw_fds.as_mut_ptr(),
@@ -127,4 +127,23 @@ pub fn recv_message(
 pub fn peer_pidfd(sock: BorrowedFd<'_>) -> Result<OwnedFd> {
     // SAFETY: `sock` is live for the call.
     check_fd(unsafe { sys::peios_socket_peer_pidfd(sock.as_raw_fd()) })
+}
+
+#[cfg(all(test, target_pointer_width = "64"))]
+mod receive_capacity_tests {
+    use super::*;
+    use std::os::fd::AsFd;
+    use std::os::unix::net::UnixDatagram;
+
+    #[test]
+    fn unrepresentable_capacity_is_rejected_before_allocation_or_receive() {
+        let (receiver, sender) = UnixDatagram::pair().unwrap();
+        receiver.set_nonblocking(true).unwrap();
+        sender.send(b"still queued").unwrap();
+        let mut bytes = [0; 32];
+        let result = recv_message(receiver.as_fd(), &mut bytes, u32::MAX as usize + 1, 0);
+        assert!(matches!(result, Err(error) if error.raw_os_error() == Some(libc::EINVAL)));
+        let received = receiver.recv(&mut bytes).unwrap();
+        assert_eq!(&bytes[..received], b"still queued");
+    }
 }
