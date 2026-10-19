@@ -129,9 +129,11 @@ class StoreTests(unittest.TestCase):
             manifest, [{"relative": "scripts/declared", "path": str(source / "declared")}]
         )
         output = self.root / "source"
-        result = package.materialise(manifest, output / "usr/src/peinit")
+        result = package.materialise(manifest, output / "usr/src/sdk-test")
         self.assertEqual(result["source_files"], 1)
-        self.assertEqual((output / "usr/src/peinit/scripts/declared").stat().st_mode & 0o777, 0o755)
+        self.assertEqual(
+            (output / "usr/src/sdk-test/scripts/declared").stat().st_mode & 0o777, 0o755
+        )
         self.assertEqual(len([p for p in output.rglob("*") if p.is_file()]), 1)
 
     def test_cancelled_writer_cleans_its_large_payload_scratch(self) -> None:
