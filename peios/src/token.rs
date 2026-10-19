@@ -9,6 +9,8 @@
 
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
+use std::marker::PhantomData;
+use std::rc::Rc;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, IntoRawFd, OwnedFd, RawFd};
 
 use bitflags::bitflags;
@@ -573,7 +575,10 @@ impl Token {
     /// ```
     pub fn impersonate_scoped(&self) -> Result<Impersonation> {
         self.impersonate()?;
-        Ok(Impersonation { active: true })
+        Ok(Impersonation {
+            active: true,
+            thread_bound: PhantomData,
+        })
     }
 
     /// Revert the calling thread to its own identity, undoing any active
@@ -900,9 +905,23 @@ impl IntoRawFd for Token {
 /// its *real* token — impersonations do not nest. Prefer
 /// [`revert`](Self::revert) when you must observe the result; [`Drop`] is a
 /// best-effort backstop that cannot report a failure.
+///
+/// The guard belongs to the thread that created it. Moving or sharing it across
+/// threads is forbidden because reverting changes only the calling thread.
+///
+/// ```compile_fail
+/// fn require_send<T: Send>() {}
+/// require_send::<peios::token::Impersonation>();
+/// ```
+///
+/// ```compile_fail
+/// fn require_sync<T: Sync>() {}
+/// require_sync::<peios::token::Impersonation>();
+/// ```
 #[must_use = "the impersonation reverts the instant this guard is dropped; bind it to a variable to keep it active"]
 pub struct Impersonation {
     active: bool,
+    thread_bound: PhantomData<Rc<()>>,
 }
 
 impl Impersonation {
@@ -1274,9 +1293,7 @@ impl Drop for TokenBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        decode_token_statistics, InteractivityScope, SessionId, TokenStatistics, TokenType,
-    };
+    use super::{decode_token_statistics, InteractivityScope, SessionId, TokenStatistics, TokenType};
     use crate::error::Error;
     use peios_sys as sys;
 
@@ -1440,9 +1457,13 @@ impl Session {
             // SAFETY: filled by the call above; its pointers are valid until
             // the next call, and are copied out before it.
             let raw = unsafe { raw.assume_init() };
-            let sid = unsafe { core::slice::from_raw_parts(raw.user_sid, raw.user_sid_len as usize) };
+            let sid =
+                unsafe { core::slice::from_raw_parts(raw.user_sid, raw.user_sid_len as usize) };
             let package = unsafe {
-                core::slice::from_raw_parts(raw.auth_package as *const u8, raw.auth_package_len as usize)
+                core::slice::from_raw_parts(
+                    raw.auth_package as *const u8,
+                    raw.auth_package_len as usize,
+                )
             };
             let user = SidRef::from_bytes(sid)
                 .map(Sid::from_ref)
@@ -1499,7 +1520,7 @@ impl LogonType {
     }
 }
 
-const EINVAL: i32 = 22;
+const EINVAL: i32 = libc::EINVAL;
 
 /// The fixed width of a token source name (`KACS_TOKEN_SPEC_SOURCE_NAME_BYTES`).
 const SOURCE_NAME_LEN: usize = sys::KACS_TOKEN_SPEC_SOURCE_NAME_BYTES as usize;
