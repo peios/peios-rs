@@ -79,3 +79,10 @@ Event emission checks names, payload lengths, and batch counts before
 converting them to the C ABI's fixed-width fields. Values that do not fit
 return `EINVAL`. Socket receive calls also reject an unrepresentable handle
 capacity before allocating its buffer or consuming a message.
+
+## Access checks and request identity
+
+[Audit Contexts in Rust](~peios/sdk-basics/audit-contexts-in-rust) explains
+object descriptions and denial results.
+[Token Messages in Rust](~peios/sdk-basics/token-messages-in-rust) covers
+received-handle ownership, truncation, and explicit peer-identity fallback.
