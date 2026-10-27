@@ -1,6 +1,0 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
-package(default_visibility = ["//visibility:public"])
-filegroup(name = "sources", srcs = ["BUILD.bazel"] + glob(["kernel/**"]) + ["//vendor/ppk:sources"])
-exports_files(["kernel/peios/rust/peios-uapi/Cargo.toml"])
-
-rust_library(name = "peios-uapi", srcs = glob(["kernel/peios/rust/peios-uapi/*.rs", "kernel/security/pkm/kacs/*.rs"]), crate_root = "kernel/peios/rust/peios-uapi/lib.rs", crate_name = "peios_uapi", edition = "2024")
