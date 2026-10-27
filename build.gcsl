@@ -1,0 +1,62 @@
+# peios-rs, the Rust bindings of libpeios, built one crate at a time (see
+# the rust library's `workspace`). `peios-sys` binds the SDK's libpeios with
+# bindgen and links it, built from the SDK at the commit `pekit.lock` pins.
+#
+# peios-rs is a library as well as a workspace: a workspace whose crates
+# depend on its crates gives `peios-sys` what it needs, and its build
+# scripts libclang, and gives a program that links libpeios its runtime:
+#
+#     import "github.com/peios/peios-rs" as peios_rs
+#     rust.workspace(..., crates = [...peios_rs.crate_settings()], libclang = [clang.libclang_18()])
+#     rust.run_test(test, given = peios_rs.runtime(), env = peios_rs.runtime_env())
+import "github.com/gcslib/clang"
+import "github.com/gcslib/rust"
+import build * from "github.com/peios/peios-sdk"
+
+# Where `peios-sys`'s build script finds libpeios and its headers.
+let SDK = "/opt/peios"
+
+# The settings of `peios-sys`: libpeios, by its link name and its soname,
+# and its headers, the kernel's `pkm` ones among them, placed for it and
+# everything that depends on it, where its build script is told they are.
+def crate_settings() -> List<rust.CrateSettings> {
+    = [
+        {
+            package = "peios-sys"
+            env = [
+                {key = "PEIOS_LIB_DIR"; value = "{SDK}/lib"},
+                {key = "PEIOS_INCLUDE"; value = "{SDK}/include"},
+                {key = "PKM_UAPI"; value = "{SDK}/include"},
+            ]
+            given = [
+                {at = "{SDK}/lib/libpeios.so"; place = build libpeios()},
+                {at = "{SDK}/lib/libpeios.so.0"; place = build libpeios()},
+                {at = "{SDK}/include"; place = build libpeios_include()},
+            ]
+        },
+    ]
+}
+
+# What a program that links libpeios loads: libpeios, by its soname, where
+# `peios-sys` links it from.
+def runtime() -> List<{at: String, place: Dir | File}> {
+    = [{at = "{SDK}/lib/libpeios.so.0"; place = build libpeios()}]
+}
+
+# Where such a program finds it: `peios-sys`'s build script gives only its
+# own targets a run path, so every other program is told.
+def runtime_env() -> List<Entry<String>> {
+    = [{key = "LD_LIBRARY_PATH"; value = "{SDK}/lib"}]
+}
+
+# peios-rs's workspace, planned. `peios-uapi`, the kernel's crate it
+# vendors, reads the kernel's sources beside it.
+def crates() -> rust.RustWorkspace {
+    let kernel = [{at = "vendor/kernel"; place = dir("vendor/kernel")}]
+    = rust.workspace(
+        dir("."),
+        rust.vendored(file("Cargo.lock")),
+        crates = [...crate_settings(), {package = "peios-uapi"; data = kernel}],
+        libclang = [clang.libclang_18()],
+    )
+}

@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EXCLUDED = {
     ".git",
-    ".ci-sdk",
+    ".gcsl",
+    "pekit-out",
     "vendor",
     "target",
     "dist",
@@ -24,13 +25,7 @@ def sources() -> list[Path]:
     """Enumerate owned source without following build-output symlinks."""
     found = []
     for parent, directories, names in os.walk(ROOT):
-        directories[:] = [
-            name
-            for name in directories
-            if name not in EXCLUDED
-            and not name.startswith("bazel-")
-            and not (Path(parent) == ROOT / "build")
-        ]
+        directories[:] = [name for name in directories if name not in EXCLUDED]
         for name in names:
             path = Path(parent) / name
             if path.is_symlink() or path.parts[-3:-1] == ("internal", "uapi"):
@@ -54,7 +49,6 @@ def main() -> None:
         "ruff": "ruff 0.17.0",
         "shellcheck": "version: 0.11.0",
         "shfmt": "v3.14.1",
-        "buildifier": "buildifier version: 10.1.0",
         "clang-format": "clang-format version 18.1.8",
         "prettier": "3.9.10",
     }
@@ -89,23 +83,9 @@ def main() -> None:
             *python,
         ]
     )
-    shell = [
-        str(p)
-        for p in paths
-        if p.suffix == ".sh" or p.name in {"bazel", "check", "offline-build", "prepare-dev-sdk"}
-    ]
+    shell = [str(p) for p in paths if p.suffix == ".sh" or p.name == "check"]
     run([str(directory / "shellcheck"), *shell])
     run([str(directory / "shfmt"), "-i", "4", "-w" if args.fix else "-d", *shell])
-    starlark = [str(p) for p in paths if p.suffix == ".bzl" or p.name.endswith(".bazel")]
-    run(
-        [
-            str(directory / "buildifier"),
-            "-mode=fix" if args.fix else "-mode=check",
-            "-lint=warn",
-            "-warnings=load,unused-variable,function-docstring",
-            *starlark,
-        ]
-    )
     rust = [str(p) for p in paths if p.suffix == ".rs"]
     if rust:
         run(
@@ -139,8 +119,7 @@ def main() -> None:
     data = [
         str(p)
         for p in paths
-        if p.suffix in {".json", ".yaml", ".yml"}
-        and p.name not in {"package-lock.json", "MODULE.bazel.lock"}
+        if p.suffix in {".json", ".yaml", ".yml"} and p.name != "package-lock.json"
     ]
     if data:
         run(

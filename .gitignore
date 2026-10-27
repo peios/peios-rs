@@ -1,8 +1,10 @@
 /target
 **/*.rs.bk
 
-/bazel-*
-/.ci-sdk/
 /docs/learn/dist/
 **/__pycache__/
 **/.ruff_cache/
+
+# pekit build output, and the libraries pekit lock exports.
+/pekit-out/
+/.gcsl/
