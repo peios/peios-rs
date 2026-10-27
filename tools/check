@@ -1,17 +1,17 @@
 #!/bin/bash
-# Validate maintained source, declared build outputs and development packages.
+# Validate maintained source, the pekit build and its tests, and Cargo's
+# lints and tests against a development SDK pekit lays out.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 tools/style-check.py
 python3 tools/update-kernel-inputs.py check
-./bazel test //...
-./bazel build //:packages
-if [[ -n ${PEIOS_SDK:-} ]]; then
-    export PEIOS_LIB_DIR="$PEIOS_SDK/lib"
-    export PEIOS_INCLUDE="$PEIOS_SDK/include"
-    export PKM_UAPI="$PEIOS_SDK/include"
-    export LD_LIBRARY_PATH="$PEIOS_SDK/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-fi
+pekit test
+pekit build tools/sdk
+PEIOS_SDK=${PEIOS_SDK:-$PWD/pekit-out/tools/sdk/laid_out/sdk}
+export PEIOS_LIB_DIR="$PEIOS_SDK/lib"
+export PEIOS_INCLUDE="$PEIOS_SDK/include"
+export PKM_UAPI="$PEIOS_SDK/include"
+export LD_LIBRARY_PATH="$PEIOS_SDK/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 compiler_include=$(cc -print-file-name=include)
 export BINDGEN_EXTRA_CLANG_ARGS="-isystem $compiler_include"
 cargo +1.98.1 clippy --workspace --all-targets --locked -- -D warnings

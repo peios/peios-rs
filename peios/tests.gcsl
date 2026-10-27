@@ -1,0 +1,12 @@
+# peios's tests, its unit and integration tests, as `cargo test -p` builds
+# them, and with the `uapi` feature, which takes the kernel's types from
+# `peios-uapi`.
+import "github.com/gcslib/rust"
+
+def test unit(tests: List<rust.RustTest> = rust.tests(crates(), "peios"), given: List<{at: String, place: Dir | File}> = runtime()) {
+    let each = for test in tests { = rust.run_test(test, given = given, env = runtime_env()) }
+}
+
+def test uapi(tests: List<rust.RustTest> = rust.tests(crates(), "peios", features = ["uapi"]), given: List<{at: String, place: Dir | File}> = runtime()) {
+    let each = for test in tests { = rust.run_test(test, given = given, env = runtime_env()) }
+}

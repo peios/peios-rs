@@ -1,0 +1,27 @@
+# A development SDK for Cargo outside pekit: libpeios and its headers, laid
+# out as an installed SDK is, `include/` and `lib/`, at
+# `pekit-out/tools/sdk/laid_out/sdk`, which `tools/check` gives Cargo as
+# `PEIOS_SDK`.
+import fs
+import path
+import build * from "github.com/peios/peios-sdk"
+
+def build sdk() {
+    = laid_out(build libpeios(), build libpeios_include())
+}
+
+# `library` and the headers `include` in a directory `sdk` of the step's
+# own, the library by its soname and its link name.
+#[hermetic]
+fn laid_out(library: File, include: Dir) -> Dir {
+    let sdk = working_dir().dir("sdk")
+    let lib = fs.mkdir("{sdk.path}/lib")
+    let so = fs.copy(library.path, "{sdk.path}/lib/libpeios.so.0")
+    let linked = fs.copy(library.path, "{sdk.path}/lib/libpeios.so")
+    for header in include.files() {
+        let at = "{sdk.path}/include/{header.path.strip_prefix("{include.path}/")}"
+        let parent = fs.mkdir(path.dirname(at))
+        let copied = fs.copy(header.path, at)
+    }
+    = sdk
+}

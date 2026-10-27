@@ -1,25 +1,71 @@
 # Building and Testing peios-rs
 
-Run commands from this repository. The `bazel` launcher verifies Bazel 8.4.2;
-Bazel pins the language toolchains and dependency graph. Development checks
-also use the host C compiler, Python 3.11 or later, and libclang where bindings
-are generated. These host dependencies are not a hermetic Peios toolchain.
+Use pekit to build peios-rs and run its tests. Pekit builds each crate on
+its own, so a change rebuilds only the crates it reaches. The supported
+development host is x86-64 Linux.
 
-## Host checks
+## Before you start
 
-Set `PEIOS_SDK` to an absolute SDK root containing matching `include/peios.h`,
-`include/pkm`, and `lib/libpeios.so.0`. Use libpeios 0.5.12 or later: its event
-reader keeps a private snapshot instead of returning externally mutable data.
+You need pekit and Git. Everything else is pinned and fetched by pekit on
+the first build: the Bootlin C toolchain, Rust 1.98.1, libclang, the
+crates `Cargo.lock` selects, and the Peios SDK. The first build needs
+network access; later builds find what they need in pekit's store, and
+every step runs without network access in a sandbox that holds only its
+declared inputs.
+
+`peios-sys` binds libpeios with bindgen and links it. Pekit builds libpeios
+and its headers from the Peios SDK's own files, through the SDK's GCSL
+library, which `build.gcsl` imports. `pekit lock` pins the SDK's commit,
+and the gcslib libraries', in `pekit.lock`. Use libpeios 0.5.12 or later:
+its event reader keeps a private snapshot instead of returning externally
+mutable data.
+
+## Test
 
 ```sh
-./bazel test //...
+pekit test
 ```
 
-The `peios-sys:uapi-tests` target checks the recorded kernel type feature.
-Guard documentation tests reject sending or sharing impersonation guards.
-Ordinary tests do not perform Peios identity or service operations on the host.
+| Test | Check |
+|---|---|
+| `peios-sys/unit` | `peios-sys`'s unit tests and its smoke test against libpeios |
+| `peios-sys/uapi` | The same, with the kernel's types from `peios-uapi` |
+| `peios/unit` | `peios`'s unit tests, smoke tests, and event snapshot test |
+| `peios/uapi` | The same, with the `uapi` feature |
 
-For Cargo, use an installed `peios.pc`, or set all of these variables:
+A test whose inputs did not change is found in the store and not run
+again. Ordinary tests do not perform Peios identity or service operations
+on the host. Pekit doesn't run documentation tests yet, so the guard tests
+that reject sending or sharing impersonation guards run with Cargo.
+
+## Building against peios-rs
+
+peios-rs is a GCSL library as well as a workspace. A workspace whose crates
+depend on its crates gives `peios-sys` what it needs, and its build scripts
+libclang, and gives its programs libpeios when they run:
+
+```text
+import "github.com/gcslib/clang"
+import "github.com/peios/peios-rs" as peios_rs
+
+rust.workspace(..., crates = [...peios_rs.crate_settings()], libclang = [clang.libclang_18()])
+rust.run_test(test, given = peios_rs.runtime(), env = peios_rs.runtime_env())
+```
+
+`peios-sys`'s build script gives only `peios-sys`'s own programs a run
+path, so `runtime_env()` tells every other program where libpeios is.
+
+## Cargo
+
+Cargo builds and tests peios-rs against an SDK laid out as an installed
+one is. Pekit lays one out from the SDK's library:
+
+```sh
+pekit build tools/sdk
+export PEIOS_SDK="$PWD/pekit-out/tools/sdk/laid_out/sdk"
+```
+
+Use an installed `peios.pc`, or set all of these variables:
 
 ```sh
 export PEIOS_LIB_DIR="$PEIOS_SDK/lib"
@@ -31,46 +77,23 @@ cargo +1.98.1 test --workspace --locked
 cargo +1.98.1 test --workspace --features uapi --locked
 ```
 
-`PKM_UAPI` is retained as a compatible environment-variable name; it points to
-installed or snapshot headers, not a required PKM repository. The explicit
-SDK path bypasses pkg-config version discovery, so supply matching inputs.
-Do not rely on development rpaths propagating into downstream executables.
+`PKM_UAPI` is retained as a compatible environment-variable name; it points
+to installed or snapshot headers, not a required PKM repository. The
+explicit SDK path bypasses pkg-config version discovery, so supply matching
+inputs. Do not rely on development run paths propagating into downstream
+executables.
 
-The `static` feature selects the C static archive. A Rust `std` executable can
-conflict with that archive's embedded runtime. Check the feature with
+The `static` feature selects the C static archive. A Rust `std` executable
+can conflict with that archive's embedded runtime. Check the feature with
 `cargo check`; use dynamic linking for host tests and normal applications.
 
-## Reference SDK fixture
+## Not built with pekit yet
 
-Build a matched development C SDK from the consolidated repository:
-
-```sh
-python3 tools/prepare-dev-sdk.py ../peios-sdk /absolute/path/to/sdk-fixture
-export PEIOS_SDK=/absolute/path/to/sdk-fixture
-```
-
-The destination must be new. The helper builds the shared library and static
-archive with Bazel, copies the matching headers, and records file hashes,
-source revision, and checkout changes in `provenance.json`.
-
-## Packages
-
-```sh
-./bazel build //:packages
-```
-
-The output under `bazel-bin/packages/store.store` contains canonical manifests,
-compressed content-addressed blobs, and a provenance index. The package holds
-SDK source, licenses, build definitions, and maintained documentation. It does
-not bundle third-party compiler caches or an installed compiler.
-
-The package is `dev.peios.peios-rs-devel`, version
-`0.4.0-1`, architecture `noarch`. It installs source under
-`/usr/src/rust/peios-rs`.
-Cargo manifests retain the individual crate versions: `peios` 0.4.0 and `peios-sys` 0.3.0.
-
-Provenance marks these packages as development output, not release-qualified
-artifacts. Kernel VM tests and release-image qualification remain separate.
+The development source package, `dev.peios.peios-rs-devel`, and builds with
+the native Peios toolchain, which hardens programs with control-flow
+enforcement technology (CET), are not yet built with pekit. The packaging
+pipeline and the native build settings from the Bazel build are kept
+outside this repository until they are.
 
 ## Kernel input provenance
 
@@ -81,8 +104,10 @@ rerun host, differential, and native checks. Do not format vendored inputs.
 
 ## Style and documentation
 
-Use `tools/prepare-style-tools.py` with an output directory outside the repository.
-Set `PEIOS_STYLE_BIN` to that directory, then run `tools/check`.
-Set `TRAIL` to the maintained Trail executable and run `tools/check-docs`.
-The optional `--context ../learn` check validates publication links
-against the complete merged documentation tree.
+Use `tools/prepare-style-tools.py` with an output directory outside the
+repository. Set `PEIOS_STYLE_BIN` to that directory, then run `tools/check`,
+which checks style and the kernel inputs, runs the pekit tests, lays out a
+development SDK, and runs Cargo's lints and tests against it. Set `TRAIL` to
+the maintained Trail executable and run `tools/check-docs`. The optional
+`--context ../learn` check validates publication links against the complete
+merged documentation tree.
