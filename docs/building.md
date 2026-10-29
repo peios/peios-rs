@@ -55,6 +55,11 @@ rust.run_test(test, given = peios_rs.runtime(), env = peios_rs.runtime_env())
 `peios-sys`'s build script gives only `peios-sys`'s own programs a run
 path, so `runtime_env()` tells every other program where libpeios is.
 
+A static program for `x86_64-unknown-linux-musl` enables the `peios`
+crate's `static` feature and uses `static_musl_crate_settings()` in place
+of `crate_settings()`. It links libpeios's static archive for musl, with
+its private symbols renamed, and loads nothing at run time.
+
 ## Cargo
 
 Cargo builds and tests peios-rs against an SDK laid out as an installed
