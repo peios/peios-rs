@@ -1,5 +1,5 @@
 [
-  "trail: warning: /peios/developing-for-peios/sdk-basics/audit-contexts-in-rust: link '~peios/sdk-access/the-audit-context' matches no page in product 'peios'",
-  "trail: warning: /peios/developing-for-peios/sdk-basics/audit-contexts-in-rust: link '~specifications/pgss/events/access-decisions' names unknown product 'specifications'",
-  "trail: warning: /peios/developing-for-peios/sdk-basics/token-messages-in-rust: link '~peios/sdk-tokens/opening-and-creating-tokens' matches no page in product 'peios'"
+    "trail: warning: /peios/developing-for-peios/sdk-basics/audit-contexts-in-rust: link '~peios/sdk-access/the-audit-context' matches no page in product 'peios'",
+    "trail: warning: /peios/developing-for-peios/sdk-basics/audit-contexts-in-rust: link '~specifications/pgss/events/access-decisions' names unknown product 'specifications'",
+    "trail: warning: /peios/developing-for-peios/sdk-basics/token-messages-in-rust: link '~peios/sdk-tokens/opening-and-creating-tokens' matches no page in product 'peios'"
 ]
