@@ -9,6 +9,9 @@
 #     import "github.com/peios/peios-rs" as peios_rs
 #     rust.workspace(..., crates = [...peios_rs.crate_settings()], libclang = [clang.libclang_18()])
 #     rust.run_test(test, given = peios_rs.runtime(), env = peios_rs.runtime_env())
+#
+# A static musl program, whose workspace enables the `static` feature, uses
+# `static_musl_crate_settings()` in place of `crate_settings()`.
 import "github.com/gcslib/clang"
 import "github.com/gcslib/rust"
 import build * from "github.com/peios/peios-sdk"
@@ -23,17 +26,40 @@ def crate_settings() -> List<rust.CrateSettings> {
     = [
         {
             package = "peios-sys"
-            env = [
-                {key = "PEIOS_LIB_DIR"; value = "{SDK}/lib"},
-                {key = "PEIOS_INCLUDE"; value = "{SDK}/include"},
-                {key = "PKM_UAPI"; value = "{SDK}/include"},
-            ]
+            env = sdk_env()
             given = [
                 {at = "{SDK}/lib/libpeios.so"; place = build libpeios()},
                 {at = "{SDK}/lib/libpeios.so.0"; place = build libpeios()},
                 {at = "{SDK}/include"; place = build libpeios_include()},
             ]
         },
+    ]
+}
+
+# The settings of `peios-sys` for a static program for
+# `x86_64-unknown-linux-musl`, whose workspace enables its `static`
+# feature: libpeios's static archive for musl, its private symbols renamed
+# so that it links beside the program's own Rust runtime, and its headers.
+# Such a program loads nothing at run time.
+def static_musl_crate_settings() -> List<rust.CrateSettings> {
+    = [
+        {
+            package = "peios-sys"
+            env = sdk_env()
+            given = [
+                {at = "{SDK}/lib/libpeios.a"; place = build libpeios_static_musl()},
+                {at = "{SDK}/include"; place = build libpeios_include()},
+            ]
+        },
+    ]
+}
+
+# Where `peios-sys`'s build script is told libpeios and its headers are.
+fn sdk_env() -> List<Entry<String>> {
+    = [
+        {key = "PEIOS_LIB_DIR"; value = "{SDK}/lib"},
+        {key = "PEIOS_INCLUDE"; value = "{SDK}/include"},
+        {key = "PKM_UAPI"; value = "{SDK}/include"},
     ]
 }
 

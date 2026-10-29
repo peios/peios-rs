@@ -77,8 +77,8 @@
       "path": "github.com/peios/peios-sdk",
       "git": "https://github.com/peios/peios-sdk",
       "dir": "",
-      "commit": "7dc4b01473fb7737221bbab61c7a1ff450fe5457",
-      "tree": "d79b9281bd6a2c18146b7447a149cf4e989a176caa095fc74b3ef0bf765e6524"
+      "commit": "e4e5fc7729aaf0c48ce3c17cd01db5bb46c747f4",
+      "tree": "a99ee01e1c461f1110dd3aa2252005de09657ffc08d4058d3782c858dafe69f0"
     }
   ]
 }
