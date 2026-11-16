@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/peios/kernel",
-  "commit": "1e92b73e23ac2ad3a46b984581bfd0db1cbac119",
+  "commit": "b2c68c4f5f9a29a2385b85c9189c049e775f3fc1",
   "paths": [
     "include/uapi/pkm",
     "peios/rust/peios-uapi",
