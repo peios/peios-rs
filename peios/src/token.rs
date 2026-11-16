@@ -768,7 +768,7 @@ pub enum ClaimValues {
 }
 
 impl ClaimValues {
-    fn value_type(&self) -> u16 {
+    pub(crate) fn value_type(&self) -> u16 {
         let t = match self {
             ClaimValues::Int64(_) => sys::KACS_CLAIM_TYPE_INT64,
             ClaimValues::Uint64(_) => sys::KACS_CLAIM_TYPE_UINT64,
@@ -782,7 +782,7 @@ impl ClaimValues {
 
     /// Build the FFI value array. Scalar variants store the value inline;
     /// bytes-backed variants point into `self`, which outlives the call.
-    fn to_ffi(&self) -> Vec<sys::peios_token_claim_value> {
+    pub(crate) fn to_ffi(&self) -> Vec<sys::peios_token_claim_value> {
         fn scalar(s: u64) -> sys::peios_token_claim_value {
             sys::peios_token_claim_value {
                 scalar: s,

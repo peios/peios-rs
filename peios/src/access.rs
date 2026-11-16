@@ -23,6 +23,12 @@ use crate::error::{Error, Result};
 use crate::security::{AccessMask, GenericMapping, SecurityDescriptor, SidRef};
 use crate::util::{check, check_len, opt_fd};
 
+mod subject;
+pub use subject::{
+    ClaimCoverage, MissingSubjectContext, SubjectAccessDecision, SubjectGroup, SuppliedClaims,
+    SuppliedSubject,
+};
+
 /// `EACCES` using the platform definition: the errno
 /// libpeios reports for an access *denial*, which is a decision, not an error.
 const EACCES: i32 = libc::EACCES;
