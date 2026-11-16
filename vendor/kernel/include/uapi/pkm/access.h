@@ -32,6 +32,56 @@
 /* Largest object-type tree entry count the kernel accepts. */
 #define KACS_ACCESS_CHECK_MAX_OBJECT_TYPE_COUNT 1024U
 
+/* Supplied-subject query, syscall 1028. No token is created or adopted.
+ * One LE buffer contains this 152-byte header followed by packed sections in
+ * table order. Each pair is {offset, byte_length}; empty sections use {0,0}.
+ * Sections: SD, user SID, groups, device groups, user/device/local claims,
+ * user/device/local known-absent names, SELF SID, object tree, audit context.
+ * Groups use repeated {u32 sid_len, SID bytes, u32 attributes}; claims use
+ * repeated {u32 entry_len, typed claim entry}; absent names use {u32 len, UTF8}.
+ * Known bits 0/1 distinguish known-empty user/device groups from unknown.
+ * Coverage bits 0/1/2 mark complete user/device/local claim sets; otherwise
+ * omitted claim names remain unknown unless listed explicitly as absent.
+ * Unknown flags/bits, nonzero reserved fields, gaps/overlap/trailing bytes,
+ * invalid or excessive collections fail the entire request. No truncation.
+ * Typed claims are at most 64 KiB per namespace, 1024 values per attribute;
+ * the sum of entry_bytes * max(value_count, 1), including SD resource claims,
+ * is at most 1 MiB, bounding
+ * repeated-offset decoding before allocation. Absent names are 1..255 UTF8
+ * bytes; each collection has at most 1024 items.
+ */
+#define KACS_SUBJECT_VERSION 1U
+#define KACS_SUBJECT_HEADER_BYTES 152U
+#define KACS_SUBJECT_MAX_BYTES (1024U * 1024U)
+#define KACS_SUBJECT_MAX_ITEMS 1024U
+#define KACS_SUBJECT_NO_AUDIT 1U
+
+struct kacs_subject_request {
+	__u32 version;
+	__u32 total_bytes;
+	__u32 flags;
+	__u32 known_groups;
+	__u32 desired_access;
+	__u32 mapping_read;
+	__u32 mapping_write;
+	__u32 mapping_execute;
+	__u32 mapping_all;
+	__u32 object_index;
+	__u32 complete_claims;
+	__u32 reserved;
+	__u32 sections[26];
+};
+
+/* A successful syscall writes all three fields, including on denial/missing
+ * context. A syscall error leaves no usable decision. Missing context never
+ * carries a provisional grant. No audit records are emitted for that result.
+ */
+struct kacs_subject_result {
+	__u32 decision; /* 0 denied, 1 granted, 2 missing context */
+	__u32 granted;
+	__u32 missing;
+};
+
 /*
  * AccessCheck request. Pointer fields hold userspace addresses; a zero
  * pointer paired with a zero length means "absent". The _pad fields must

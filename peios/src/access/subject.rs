@@ -155,13 +155,23 @@ fn groups(input: Option<&[SubjectGroup<'_>]>) -> Option<Vec<sys::peios_subject_g
 
 impl AccessCheck<'_> {
     /// Check supplied identity facts at the SD root, without using any caller
-    /// token. No kernel rebuild is required by the initial userspace backend.
+    /// token for access calculation. Requires the supplied-subject kernel API;
+    /// an older kernel returns an unsupported syscall error without fallback.
     ///
-    /// Explicit token, privilege-intent or kernel-audit settings are invalid for
-    /// this mode. Execution-sensitive SDs return MissingContext; this does not
+    /// Explicit token and privilege-intent settings are invalid for this mode.
+    /// AuditContext labels the guarded object; SACL records require the real
+    /// caller's enabled SeAuditPrivilege. Execution-sensitive SDs return
+    /// MissingContext; this does not
     /// simulate OS privileges/confinement or replace kernel enforcement.
     pub fn check_subject(&self, subject: &SuppliedSubject<'_>) -> Result<SubjectAccessDecision> {
         self.check_supplied(subject, &[], 0)
+    }
+
+    /// Suppress this supplied-subject query's SACL audit emission. Does not
+    /// affect real-token checks or the service's own admission events.
+    pub fn subject_no_audit(&mut self, suppress: bool) -> &mut Self {
+        self.subject_no_audit = suppress;
+        self
     }
 
     /// Check one node of an explicit object-type tree. GUID-scoped ACEs retain
@@ -227,7 +237,13 @@ impl AccessCheck<'_> {
         };
         // SAFETY: all spans borrow self/subject or the storage above for this
         // synchronous call; out is writable and disjoint from every input.
-        let result = unsafe { sys::peios_access_check_subject(&request, &raw, node, &mut out) };
+        let flags = if self.subject_no_audit {
+            sys::PEIOS_SUBJECT_NO_AUDIT
+        } else {
+            0
+        };
+        let result =
+            unsafe { sys::peios_access_check_subject_ex(&request, &raw, node, flags, &mut out) };
         crate::util::check(result)?;
         match out.decision {
             sys::PEIOS_SUBJECT_ACCESS_GRANTED => Ok(SubjectAccessDecision::Granted {
@@ -254,6 +270,7 @@ mod tests {
     use crate::token::{ClaimAttr, ClaimValues};
 
     #[test]
+    #[ignore = "requires the supplied-subject syscall on a booted Peios kernel"]
     fn supplied_identity_does_not_use_the_callers_token_or_invent_groups() {
         let sd = sddl::parse("O:SYG:SYD:(D;;0x1;;;BA)(A;;0x1;;;SY)").unwrap();
         let user = Sid::well_known(WellKnown::System);
@@ -290,6 +307,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires the supplied-subject syscall on a booted Peios kernel"]
     fn claim_values_and_coverage_survive_the_safe_wrapper() {
         for (name, alias) in [("Department", "department"), ("Équipe", "équipe")] {
             check_claim_knowledge(name, alias);

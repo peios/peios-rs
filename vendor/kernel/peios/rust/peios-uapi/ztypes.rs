@@ -653,6 +653,222 @@ fn bindgen_test_layout_kacs_get_linked_token_args() {
 }
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_subject_request {
+    pub version: __u32,
+    pub total_bytes: __u32,
+    pub flags: __u32,
+    pub known_groups: __u32,
+    pub desired_access: __u32,
+    pub mapping_read: __u32,
+    pub mapping_write: __u32,
+    pub mapping_execute: __u32,
+    pub mapping_all: __u32,
+    pub object_index: __u32,
+    pub complete_claims: __u32,
+    pub reserved: __u32,
+    pub sections: [__u32; 26usize],
+}
+#[test]
+fn bindgen_test_layout_kacs_subject_request() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_subject_request> =
+        ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_subject_request>(),
+        152usize,
+        concat!("Size of: ", stringify!(kacs_subject_request))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_subject_request>(),
+        4usize,
+        concat!("Alignment of ", stringify!(kacs_subject_request))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).version) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(version)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).total_bytes) as usize - ptr as usize },
+        4usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(total_bytes)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).flags) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(flags)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).known_groups) as usize - ptr as usize },
+        12usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(known_groups)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).desired_access) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(desired_access)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).mapping_read) as usize - ptr as usize },
+        20usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(mapping_read)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).mapping_write) as usize - ptr as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(mapping_write)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).mapping_execute) as usize - ptr as usize },
+        28usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(mapping_execute)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).mapping_all) as usize - ptr as usize },
+        32usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(mapping_all)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).object_index) as usize - ptr as usize },
+        36usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(object_index)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).complete_claims) as usize - ptr as usize },
+        40usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(complete_claims)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).reserved) as usize - ptr as usize },
+        44usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(reserved)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).sections) as usize - ptr as usize },
+        48usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_request),
+            "::",
+            stringify!(sections)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_subject_result {
+    pub decision: __u32,
+    pub granted: __u32,
+    pub missing: __u32,
+}
+#[test]
+fn bindgen_test_layout_kacs_subject_result() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_subject_result> =
+        ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_subject_result>(),
+        12usize,
+        concat!("Size of: ", stringify!(kacs_subject_result))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_subject_result>(),
+        4usize,
+        concat!("Alignment of ", stringify!(kacs_subject_result))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).decision) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_result),
+            "::",
+            stringify!(decision)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).granted) as usize - ptr as usize },
+        4usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_result),
+            "::",
+            stringify!(granted)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).missing) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_subject_result),
+            "::",
+            stringify!(missing)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct kacs_access_check_args {
     pub caller_size: __u32,
     pub token_fd: __s32,

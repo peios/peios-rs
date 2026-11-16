@@ -44,6 +44,7 @@
 #define SYS_KACS_SET_CAAP 1025
 #define SYS_KACS_GET_MOUNT_POLICY 1026
 #define SYS_KACS_SET_MOUNT_POLICY 1027
+#define SYS_KACS_ACCESS_CHECK_SUBJECT 1028
 
 /* KMES — kernel-mediated event stream. */
 #define SYS_KMES_EMIT 1090

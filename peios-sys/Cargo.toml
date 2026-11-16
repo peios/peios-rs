@@ -11,7 +11,7 @@ build = "build.rs"
 
 # Minimum C SDK consumed by this crate; build.rs enforces it for pkg-config.
 [package.metadata.libpeios]
-minimum-version = "0.5.12"
+minimum-version = "0.5.13"
 
 [features]
 default = []           # → dynamic link against libpeios.so

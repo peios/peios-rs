@@ -224,6 +224,7 @@ pub struct AccessCheck<'a> {
     self_sid: Option<&'a SidRef>,
     privilege_intent: u32,
     audit_context: Option<&'a AuditContext>,
+    subject_no_audit: bool,
 }
 
 impl<'a> AccessCheck<'a> {
@@ -246,6 +247,7 @@ impl<'a> AccessCheck<'a> {
             self_sid: None,
             privilege_intent: 0,
             audit_context: None,
+            subject_no_audit: false,
         }
     }
 
