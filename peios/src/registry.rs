@@ -391,6 +391,13 @@ impl Transaction {
         check_fd(unsafe { sys::peios_reg_begin_transaction() }).map(Transaction)
     }
 
+    /// Begin a bounded, single-hive read-only snapshot. The first read fixes
+    /// data and layer selection. Mutations fail EROFS. Drop releases it.
+    pub fn begin_read_only() -> Result<Transaction> {
+        // SAFETY: argument-less syscall returning an owned fd.
+        check_fd(unsafe { sys::peios_reg_begin_read_transaction() }).map(Transaction)
+    }
+
     fn raw(&self) -> RawFd {
         self.0.as_raw_fd()
     }
@@ -462,12 +469,30 @@ impl Key {
         access: KeyAccess,
         flags: OpenFlags,
     ) -> Result<Key> {
+        Self::open_transacted(parent, path, access, flags, None)
+    }
+
+    /// Resolve names through `txn`, while checking the current descriptor for
+    /// each new open. Existing handles retain their ordinary granted rights.
+    pub fn open_transacted(
+        parent: Option<&Key>,
+        path: &str,
+        access: KeyAccess,
+        flags: OpenFlags,
+        txn: Option<&Transaction>,
+    ) -> Result<Key> {
         let cpath = CString::new(path).map_err(|_| Error::from_raw_os_error(EINVAL))?;
         let parent_fd = parent.map_or(-1, Key::raw);
         // SAFETY: `cpath` is a live NUL-terminated string for the call; `parent`
         // (if any) is a live borrowed fd.
         check_fd(unsafe {
-            sys::peios_reg_open_key(parent_fd, cpath.as_ptr(), access.bits(), flags.bits())
+            sys::peios_reg_open_key_transacted(
+                parent_fd,
+                cpath.as_ptr(),
+                access.bits(),
+                flags.bits(),
+                txn.map_or(-1, Transaction::raw),
+            )
         })
         .map(Key)
     }
@@ -775,6 +800,11 @@ impl Key {
 
     /// Read this key's name and metadata (requires `READ_CONTROL`).
     pub fn info(&self) -> Result<KeyInfo> {
+        self.info_transacted(None)
+    }
+
+    /// Read metadata through `txn` (or live when absent).
+    pub fn info_transacted(&self, txn: Option<&Transaction>) -> Result<KeyInfo> {
         let mut name = Vec::new();
         for _ in 0..4 {
             let mut v = sys::peios_reg_key_info {
@@ -794,7 +824,13 @@ impl Key {
             };
             // SAFETY: live fd; `v` describes the name output window (`name`
             // lives here) and receives the metadata once the name fits.
-            let ret = unsafe { sys::peios_reg_query_key_info(self.raw(), &mut v) };
+            let ret = unsafe {
+                sys::peios_reg_query_key_info_transacted(
+                    self.raw(),
+                    &mut v,
+                    txn.map_or(-1, Transaction::raw),
+                )
+            };
             if ret == 0 {
                 name.truncate(v.name_len as usize);
                 return Ok(KeyInfo {
@@ -958,18 +994,28 @@ impl Key {
     /// binary format). Owner/group/DACL need `READ_CONTROL`; the SACL needs
     /// `ACCESS_SYSTEM_SECURITY`.
     pub fn get_security(&self, secinfo: SecInfo) -> Result<SecurityDescriptor> {
+        self.get_security_transacted(secinfo, None)
+    }
+
+    /// Read a historical descriptor as data, using this handle's granted rights.
+    pub fn get_security_transacted(
+        &self,
+        secinfo: SecInfo,
+        txn: Option<&Transaction>,
+    ) -> Result<SecurityDescriptor> {
         // Probe for the SD size (zero cap), then read it, retrying once if it
         // grows between calls.
         let mut cap = 0u32;
         {
             // SAFETY: live fd; NULL buffer with 0 cap probes the size into `cap`.
             let ret = unsafe {
-                sys::peios_reg_get_security(
+                sys::peios_reg_get_security_transacted(
                     self.raw(),
                     secinfo.bits(),
                     core::ptr::null_mut(),
                     0,
                     &mut cap,
+                    txn.map_or(-1, Transaction::raw),
                 )
             };
             if ret != 0 {
@@ -984,12 +1030,13 @@ impl Key {
             let mut len = 0u32;
             // SAFETY: live fd; (buf, cap) is the output window; `len` writable.
             let ret = unsafe {
-                sys::peios_reg_get_security(
+                sys::peios_reg_get_security_transacted(
                     self.raw(),
                     secinfo.bits(),
                     buf.as_mut_ptr().cast(),
                     buf.len() as u32,
                     &mut len,
+                    txn.map_or(-1, Transaction::raw),
                 )
             };
             if ret == 0 {

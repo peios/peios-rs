@@ -300,6 +300,10 @@ ASSERT_STRUCT_SIZE(reg_get_security_args, REG_GET_SECURITY_ARGS_SIZE);
 ASSERT_FIELD_OFFSET(reg_get_security_args, security_info, 0);
 ASSERT_FIELD_OFFSET(reg_get_security_args, sd_len, 4);
 ASSERT_FIELD_OFFSET(reg_get_security_args, sd_ptr, 8);
+ASSERT_STRUCT_SIZE(reg_read_transacted_args, REG_READ_TRANSACTED_ARGS_SIZE);
+ASSERT_FIELD_OFFSET(reg_read_transacted_args, args_ptr, 0);
+ASSERT_FIELD_OFFSET(reg_read_transacted_args, txn_fd, 8);
+ASSERT_FIELD_OFFSET(reg_read_transacted_args, _pad, 12);
 
 ASSERT_STRUCT_SIZE(reg_set_security_args, REG_SET_SECURITY_ARGS_SIZE);
 ASSERT_FIELD_OFFSET(reg_set_security_args, security_info, 0);

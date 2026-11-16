@@ -16,9 +16,8 @@ declared inputs.
 `peios-sys` binds libpeios with bindgen and links it. Pekit builds libpeios
 and its headers from the Peios SDK's own files, through the SDK's GCSL
 library, which `build.gcsl` imports. `pekit lock` pins the SDK's commit,
-and the gcslib libraries', in `pekit.lock`. Use libpeios 0.5.12 or later:
-its event reader keeps a private snapshot instead of returning externally
-mutable data.
+and the gcslib libraries', in `pekit.lock`. Use libpeios 0.5.14 or later:
+the Registry read-snapshot entry points require that version.
 
 ## Test
 
@@ -61,6 +60,15 @@ of `crate_settings()`. It links libpeios's static archive for musl, with
 its private symbols renamed, and loads nothing at run time.
 
 ## Cargo
+
+The `registry-read-snapshot` example is an opt-in native qualification program.
+Build it with `cargo build -p peios --example registry-read-snapshot`, then run
+it as SYSTEM in a disposable Peios guest with
+`PEIOS_DISPOSABLE_REGISTRY_TEST=yes`. It creates and removes its own test keys
+and layer, checks snapshot isolation across persistent and volatile stores,
+current authorization on new opens, concurrent atomic updates and timeout
+cleanup. It briefly changes the guest's transaction timeout and restores its
+previous value. Ordinary host tests do not run it.
 
 Cargo builds and tests peios-rs against an SDK laid out as an installed
 one is. Pekit lays one out from the SDK's library:

@@ -3409,6 +3409,59 @@ fn bindgen_test_layout_reg_src_hive_entry() {
     );
 }
 #[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct reg_read_transacted_args {
+    pub args_ptr: __u64,
+    pub txn_fd: __s32,
+    pub _pad: __u32,
+}
+#[test]
+fn bindgen_test_layout_reg_read_transacted_args() {
+    const UNINIT: ::core::mem::MaybeUninit<reg_read_transacted_args> =
+        ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<reg_read_transacted_args>(),
+        16usize,
+        concat!("Size of: ", stringify!(reg_read_transacted_args))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<reg_read_transacted_args>(),
+        8usize,
+        concat!("Alignment of ", stringify!(reg_read_transacted_args))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).args_ptr) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(reg_read_transacted_args),
+            "::",
+            stringify!(args_ptr)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).txn_fd) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(reg_read_transacted_args),
+            "::",
+            stringify!(txn_fd)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr)._pad) as usize - ptr as usize },
+        12usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(reg_read_transacted_args),
+            "::",
+            stringify!(_pad)
+        )
+    );
+}
+#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct peios_ntfe_event {
     pub seq: __u64,
