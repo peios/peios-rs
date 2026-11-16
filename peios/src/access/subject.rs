@@ -23,6 +23,8 @@ pub enum ClaimCoverage {
 /// Disclosed values and explicit known absences under KACS name equivalence
 /// (Unicode lowercase). Partial results must not invent absences. An adapter
 /// must reconcile a source's name rules before copying its absence assertions.
+/// Updated PGSS Named results use this rule; their explicit absences provide
+/// Partial knowledge. Filtered results never establish additional absences.
 #[derive(Default)]
 pub struct SuppliedClaims<'a> {
     pub values: &'a [Claim],
@@ -289,8 +291,42 @@ mod tests {
 
     #[test]
     fn claim_values_and_coverage_survive_the_safe_wrapper() {
-        let sd = sddl::parse("O:SYG:SYD:(XA;;0x1;;;SY;(Not_Exists @User.Department))").unwrap();
+        for (name, alias) in [("Department", "department"), ("Équipe", "équipe")] {
+            check_claim_knowledge(name, alias);
+        }
+    }
+
+    fn check_claim_knowledge(name: &str, alias: &str) {
+        use crate::security::{Ace, AceFlags, AceType, AclBuilder, SdBuilder};
         let user = Sid::well_known(WellKnown::System);
+        // Build the ARTX reference directly: the text codec currently accepts
+        // ASCII attribute identifiers, while binary conditions support Unicode.
+        let utf16: Vec<_> = name.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let mut expression = b"artx".to_vec();
+        expression.push(0xf9); // @User attribute reference
+        expression.extend_from_slice(&(utf16.len() as u32).to_le_bytes());
+        expression.extend_from_slice(&utf16);
+        expression.push(0x8d); // Not_Exists
+        while expression.len() % 4 != 0 {
+            expression.push(0);
+        }
+        let acl = AclBuilder::new()
+            .add(&Ace {
+                ace_type: AceType::Other(0x09), // ACCESS_ALLOWED_CALLBACK_ACE
+                flags: AceFlags::empty(),
+                mask: 1,
+                sid: user.as_ref(),
+                object_type: None,
+                inherited_object_type: None,
+                app_data: Some(&expression),
+            })
+            .build()
+            .unwrap();
+        let sd = SdBuilder::new()
+            .owner(user.as_ref())
+            .dacl(&acl)
+            .build()
+            .unwrap();
         let check = AccessCheck::new(
             &sd,
             AccessMask::from_bits_retain(1),
@@ -308,13 +344,14 @@ mod tests {
                 missing: MissingSubjectContext::USER_CLAIMS
             }
         );
-        subject.user_claims.as_mut().unwrap().absent = &["department"];
+        let absent = [alias];
+        subject.user_claims.as_mut().unwrap().absent = &absent;
         assert!(matches!(
             check.check_subject(&subject).unwrap(),
             SubjectAccessDecision::Granted { .. }
         ));
         let claims = [Claim {
-            name: "department".into(),
+            name: alias.into(),
             flags: ClaimAttr::empty(),
             values: ClaimValues::String(vec!["Household".into()]),
         }];
@@ -327,6 +364,9 @@ mod tests {
             check.check_subject(&subject).unwrap(),
             SubjectAccessDecision::Denied { .. }
         ));
+        let conflicting_absence = [name];
+        subject.user_claims.as_mut().unwrap().absent = &conflicting_absence;
+        assert!(check.check_subject(&subject).is_err());
         subject.user_claims = Some(SuppliedClaims {
             values: &[],
             absent: &[],
