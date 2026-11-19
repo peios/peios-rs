@@ -7,10 +7,12 @@ use aws_lc_rs::signature::{
     self as backend, EcdsaKeyPair, EcdsaSigningAlgorithm, KeyPair, ParsedPublicKey, RsaKeyPair,
     VerificationAlgorithm,
 };
+
 use crate::{Error, Result, Secret};
 
-/// The kinds of key Peios offers. RSA keys always use the public exponent
-/// 65537; nothing outside this menu can be generated or imported.
+/// The kinds of key Peios offers. Keys of other kinds and sizes can be
+/// neither generated nor imported. Generated RSA keys use the public
+/// exponent 65537; imported ones keep whatever exponent the backend accepts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyAlgorithm {
     /// ECDSA over NIST P-256.
@@ -26,6 +28,17 @@ pub enum KeyAlgorithm {
 }
 
 impl KeyAlgorithm {
+    /// The scheme to sign with unless something requires another: ECDSA
+    /// with the curve's matching hash, and RSASSA-PKCS1-v1_5 with SHA-256
+    /// for RSA, which every X.509 verifier supports.
+    pub fn default_signature_scheme(self) -> SignatureScheme {
+        match self {
+            Self::EcdsaP256 => SignatureScheme::EcdsaSha256,
+            Self::EcdsaP384 => SignatureScheme::EcdsaSha384,
+            Self::Rsa2048 | Self::Rsa3072 | Self::Rsa4096 => SignatureScheme::RsaPkcs1Sha256,
+        }
+    }
+
     fn rsa_from_bits(bits: usize) -> Result<Self> {
         match bits {
             2048 => Ok(Self::Rsa2048),

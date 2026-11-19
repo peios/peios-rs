@@ -66,6 +66,17 @@ fn ecdsa_hash_is_bound_to_the_curve() {
 }
 
 #[test]
+fn every_algorithm_has_a_default_scheme_that_fits() {
+    for algorithm in ALL_ALGORITHMS {
+        let scheme = algorithm.default_signature_scheme();
+        assert!(scheme.fits(algorithm), "{algorithm:?}");
+        let key = PrivateKey::generate(algorithm).unwrap();
+        let signature = key.sign(scheme, b"m").unwrap();
+        key.public_key().verify(scheme, b"m", &signature).unwrap();
+    }
+}
+
+#[test]
 fn verification_refuses_a_scheme_that_does_not_fit() {
     let key = PrivateKey::generate(KeyAlgorithm::EcdsaP256).unwrap();
     let signature = key.sign(SignatureScheme::EcdsaSha256, b"m").unwrap();
