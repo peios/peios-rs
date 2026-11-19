@@ -1,0 +1,13 @@
+[package]
+name = "peios-crypto"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Peios cryptography: keys, signatures, sealing and building blocks"
+
+# Interim backend (PEI-1724): aws-lc-rs and RustCrypto argon2 directly. The
+# crate moves to libpeios-crypto's C ABI (PEI-1725) without changing its API.
+[dependencies]
+argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"] }
+aws-lc-rs = { version = "=1.19.0" }
+zeroize = "1.8"

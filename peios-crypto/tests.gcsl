@@ -1,0 +1,8 @@
+# peios-crypto's tests, its unit and integration tests, as `cargo test -p`
+# builds them. The interim backend links nothing of the SDK, so the tests
+# need no runtime.
+import "github.com/gcslib/rust"
+
+def test unit(tests: List<rust.RustTest> = rust.tests(crates(), "peios-crypto")) {
+    let each = for test in tests { = rust.run_test(test) }
+}
