@@ -18,6 +18,8 @@
 //!
 //! - [`PrivateKey`], [`PublicKey`] and [`Signer`]: keys, signing and
 //!   verification.
+//! - [`VerifyingKey`]: verifying signatures made by other software, such as
+//!   certificate requests, which use a wider range of keys and pairings.
 //! - [`seal_with_passphrase`] and [`open_with_passphrase`]: protecting a
 //!   secret at rest under a passphrase.
 //! - [`random`], [`digest`] and [`hmac`]: building blocks.
@@ -27,6 +29,7 @@ mod error;
 mod key;
 mod seal;
 mod secret;
+mod verify;
 
 pub mod digest;
 pub mod hmac;
@@ -36,3 +39,7 @@ pub use error::{Error, Result};
 pub use key::{KeyAlgorithm, PrivateKey, PublicKey, SignatureScheme, Signer};
 pub use seal::{open_with_passphrase, seal_with_passphrase};
 pub use secret::Secret;
+pub use verify::{
+    VerificationAlgorithm, VerifyingKey, VerifyingKeyKind, MAX_RSA_MODULUS_BITS,
+    MIN_RSA_MODULUS_BITS,
+};

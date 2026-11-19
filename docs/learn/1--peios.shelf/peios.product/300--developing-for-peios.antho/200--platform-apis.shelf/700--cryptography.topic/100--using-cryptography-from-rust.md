@@ -65,6 +65,28 @@ public.verify(SignatureScheme::EcdsaSha256, b"message", &signature)?;
 type Peios offers. A bare RSA key, a raw EC point or a compressed point is
 refused with `Error::InvalidKey`.
 
+## Verify a signature made by other software
+
+Signatures from other software, such as the signature on a certificate
+request, come in more combinations than Peios makes itself. OpenSSL, for
+example, signs with SHA-256 whatever the curve. Use `VerifyingKey` for
+these:
+
+```rust
+use peios_crypto::digest::Algorithm as Hash;
+use peios_crypto::{VerificationAlgorithm, VerifyingKey};
+
+let key = VerifyingKey::from_spki(&spki)?;
+key.verify(VerificationAlgorithm::Ecdsa(Hash::Sha256), message, &signature)?;
+```
+
+`VerifyingKey` accepts ECDSA P-256 and P-384 keys, with compressed points,
+and RSA keys from 2048 to 8192 bits. Any SHA-2 hash can be used with
+either curve. RSA-PSS signatures verify only when their salt is as long as
+their hash. SHA-1 isn't offered.
+
+A `VerifyingKey` can only verify. To sign, use a `PrivateKey`.
+
 ## Protect a private key at rest
 
 Seal the key's PKCS #8 encoding under a passphrase, and store the result:
