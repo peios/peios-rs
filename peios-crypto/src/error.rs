@@ -28,6 +28,9 @@ pub enum Error {
     /// The data is not a sealed blob, or uses a format version this build
     /// does not read.
     MalformedSealed,
+    /// An argument breaks the operation's documented requirements, such as
+    /// an empty passphrase or a certificate that isn't the key's.
+    InvalidInput,
     /// The passphrase is wrong, or the sealed blob was damaged or altered.
     WrongPassphraseOrDamaged,
     /// The backend failed unexpectedly, for example to obtain randomness.
@@ -53,6 +56,7 @@ impl fmt::Display for Error {
             }
             Self::VerificationFailed => formatter.write_str("verification failed"),
             Self::MalformedSealed => formatter.write_str("not a supported sealed blob"),
+            Self::InvalidInput => formatter.write_str("invalid argument"),
             Self::WrongPassphraseOrDamaged => {
                 formatter.write_str("wrong passphrase, or the sealed data is damaged")
             }

@@ -10,4 +10,5 @@ description = "Peios cryptography: keys, signatures, sealing and building blocks
 [dependencies]
 argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"] }
 aws-lc-rs = { version = "=1.19.0" }
+yasna = "0.6"
 zeroize = "1.8"
