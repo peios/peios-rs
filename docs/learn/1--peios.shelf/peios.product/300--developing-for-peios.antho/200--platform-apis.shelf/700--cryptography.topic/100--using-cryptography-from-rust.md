@@ -114,6 +114,27 @@ before sealing anything valuable, such as a certificate authority's key.
 Keep passphrases in a `Secret` too, as these examples do, so that they're
 wiped from memory when you're finished with them.
 
+## Export a key with its certificates
+
+To hand a key and its certificate chain to other software, such as a
+phone or a Windows machine, write them as a PKCS #12 file:
+
+```rust
+use peios_crypto::pkcs12;
+
+let p12 = pkcs12::write(&key, &certificate, &[&issuer], Some("Jack's iPhone"), passphrase)?;
+```
+
+The file uses the format OpenSSL 3 writes by default: AES-256 encryption
+under keys derived with PBKDF2-HMAC-SHA256, and an HMAC-SHA256 check over
+the whole file. Current OpenSSL, Windows 10 version 1709 and later,
+Firefox, iOS 18 and later, and macOS 15 and later can import it. Older
+Apple systems need a weaker legacy format, which peios-crypto doesn't
+write.
+
+The certificate has to be the key's own, and the passphrase can't be
+empty; otherwise `pkcs12::write` returns `Error::InvalidInput`.
+
 ## Check the result
 
 Opening a sealed blob with the wrong passphrase fails with

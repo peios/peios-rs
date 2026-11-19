@@ -22,6 +22,7 @@
 //!   certificate requests, which use a wider range of keys and pairings.
 //! - [`seal_with_passphrase`] and [`open_with_passphrase`]: protecting a
 //!   secret at rest under a passphrase.
+//! - [`pkcs12`]: writing a key and its certificates for other software.
 //! - [`random`], [`digest`] and [`hmac`]: building blocks.
 #![warn(missing_docs)]
 
@@ -33,6 +34,7 @@ mod verify;
 
 pub mod digest;
 pub mod hmac;
+pub mod pkcs12;
 pub mod random;
 
 pub use error::{Error, Result};
