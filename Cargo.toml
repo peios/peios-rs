@@ -1,7 +1,16 @@
 [workspace]
 resolver = "2"
-members = ["peios-sys", "peios", "vendor/kernel/peios/rust/peios-uapi"]
+members = ["peios-sys", "peios", "peios-crypto", "vendor/kernel/peios/rust/peios-uapi"]
 
 # peios-rs is its own workspace root, like libpeios. It binds against libpeios
 # as a C library (FFI), never against libpeios' internal Rust crates.
+#
+# peios-crypto is the exception for now: until libpeios-crypto exists it
+# calls aws-lc-rs directly (PEI-1724), and it will bind libpeios-crypto's
+# C ABI in the same way (PEI-1725).
+
+# Argon2 is memory-hard by design; unoptimised it makes sealing tests take
+# minutes rather than seconds.
+[profile.dev.package.argon2]
+opt-level = 3
 
