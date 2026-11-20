@@ -1,6 +1,6 @@
 [package]
 name = "peios-sys"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 description = "Raw FFI bindings to libpeios (the Peios userspace C ABI)"
@@ -11,7 +11,7 @@ build = "build.rs"
 
 # Minimum C SDK consumed by this crate; build.rs enforces it for pkg-config.
 [package.metadata.libpeios]
-minimum-version = "0.5.14"
+minimum-version = "0.5.15"
 
 [features]
 default = []           # → dynamic link against libpeios.so
