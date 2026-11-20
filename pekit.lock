@@ -4,7 +4,7 @@
       "prefix": "github.com/peios/peios-sdk",
       "git": "https://github.com/peios/peios-sdk",
       "dir": "",
-      "rev": "b373af600c192e0c1c89c40e6bca59f776bdb337"
+      "rev": "712be642734adf2b97df11096075c3fa901857c1"
     },
     {
       "prefix": "github.com/gcslib/rust",
@@ -77,8 +77,8 @@
       "path": "github.com/peios/peios-sdk",
       "git": "https://github.com/peios/peios-sdk",
       "dir": "",
-      "commit": "b373af600c192e0c1c89c40e6bca59f776bdb337",
-      "tree": "da1b6802c79f837b9fdaaf6258803b0983068bd5b3d52e6d61d0ad1ed8db4b29"
+      "commit": "712be642734adf2b97df11096075c3fa901857c1",
+      "tree": "c832dfc3818cd9540785c58a741d8610c7c8f69b38f26fc9650244b1b727e2e5"
     }
   ]
 }
