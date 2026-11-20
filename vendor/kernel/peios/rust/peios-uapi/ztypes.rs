@@ -1276,7 +1276,10 @@ pub struct kacs_open_how {
     pub flags: __u32,
     pub sd_ptr: __u64,
     pub sd_len: __u32,
-    pub __pad: __u32,
+    pub share_access: __u32,
+    pub lease_key: [__u8; 16usize],
+    pub lease_fd: __s32,
+    pub __pad2: __u32,
 }
 #[test]
 fn bindgen_test_layout_kacs_open_how() {
@@ -1284,7 +1287,7 @@ fn bindgen_test_layout_kacs_open_how() {
     let ptr = UNINIT.as_ptr();
     assert_eq!(
         ::core::mem::size_of::<kacs_open_how>(),
-        32usize,
+        56usize,
         concat!("Size of: ", stringify!(kacs_open_how))
     );
     assert_eq!(
@@ -1353,13 +1356,339 @@ fn bindgen_test_layout_kacs_open_how() {
         )
     );
     assert_eq!(
-        unsafe { ::core::ptr::addr_of!((*ptr).__pad) as usize - ptr as usize },
+        unsafe { ::core::ptr::addr_of!((*ptr).share_access) as usize - ptr as usize },
         28usize,
         concat!(
             "Offset of field: ",
             stringify!(kacs_open_how),
             "::",
+            stringify!(share_access)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).lease_key) as usize - ptr as usize },
+        32usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_how),
+            "::",
+            stringify!(lease_key)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).lease_fd) as usize - ptr as usize },
+        48usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_how),
+            "::",
+            stringify!(lease_fd)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).__pad2) as usize - ptr as usize },
+        52usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_how),
+            "::",
+            stringify!(__pad2)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_open_info {
+    pub granted_access: __u32,
+    pub share_access: __u32,
+    pub flags: __u32,
+    pub __pad: __u32,
+}
+#[test]
+fn bindgen_test_layout_kacs_open_info() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_open_info> = ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_open_info>(),
+        16usize,
+        concat!("Size of: ", stringify!(kacs_open_info))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_open_info>(),
+        4usize,
+        concat!("Alignment of ", stringify!(kacs_open_info))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).granted_access) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_info),
+            "::",
+            stringify!(granted_access)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).share_access) as usize - ptr as usize },
+        4usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_info),
+            "::",
+            stringify!(share_access)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).flags) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_info),
+            "::",
+            stringify!(flags)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).__pad) as usize - ptr as usize },
+        12usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_open_info),
+            "::",
             stringify!(__pad)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_lock_args {
+    pub offset: __u64,
+    pub length: __u64,
+    pub op: __u32,
+    pub flags: __u32,
+    pub cookie: __u64,
+}
+#[test]
+fn bindgen_test_layout_kacs_lock_args() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_lock_args> = ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_lock_args>(),
+        32usize,
+        concat!("Size of: ", stringify!(kacs_lock_args))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_lock_args>(),
+        8usize,
+        concat!("Alignment of ", stringify!(kacs_lock_args))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).offset) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lock_args),
+            "::",
+            stringify!(offset)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).length) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lock_args),
+            "::",
+            stringify!(length)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).op) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lock_args),
+            "::",
+            stringify!(op)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).flags) as usize - ptr as usize },
+        20usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lock_args),
+            "::",
+            stringify!(flags)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).cookie) as usize - ptr as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lock_args),
+            "::",
+            stringify!(cookie)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_lease_args {
+    pub lease_key: [__u8; 16usize],
+    pub state: __u32,
+    pub flags: __u32,
+    pub __pad: __u64,
+}
+#[test]
+fn bindgen_test_layout_kacs_lease_args() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_lease_args> = ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_lease_args>(),
+        32usize,
+        concat!("Size of: ", stringify!(kacs_lease_args))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_lease_args>(),
+        8usize,
+        concat!("Alignment of ", stringify!(kacs_lease_args))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).lease_key) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_args),
+            "::",
+            stringify!(lease_key)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).state) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_args),
+            "::",
+            stringify!(state)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).flags) as usize - ptr as usize },
+        20usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_args),
+            "::",
+            stringify!(flags)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).__pad) as usize - ptr as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_args),
+            "::",
+            stringify!(__pad)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_lease_break {
+    pub lease_key: [__u8; 16usize],
+    pub dev: __u64,
+    pub ino: __u64,
+    pub current_state: __u32,
+    pub new_state: __u32,
+    pub reason: __u32,
+    pub epoch: __u32,
+}
+#[test]
+fn bindgen_test_layout_kacs_lease_break() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_lease_break> = ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_lease_break>(),
+        48usize,
+        concat!("Size of: ", stringify!(kacs_lease_break))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_lease_break>(),
+        8usize,
+        concat!("Alignment of ", stringify!(kacs_lease_break))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).lease_key) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(lease_key)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).dev) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(dev)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).ino) as usize - ptr as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(ino)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).current_state) as usize - ptr as usize },
+        32usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(current_state)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).new_state) as usize - ptr as usize },
+        36usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(new_state)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).reason) as usize - ptr as usize },
+        40usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(reason)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).epoch) as usize - ptr as usize },
+        44usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_lease_break),
+            "::",
+            stringify!(epoch)
         )
     );
 }
@@ -1457,6 +1786,102 @@ fn bindgen_test_layout_kacs_mount_policy_args() {
             stringify!(kacs_mount_policy_args),
             "::",
             stringify!(__pad1)
+        )
+    );
+}
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct kacs_sattr {
+    pub version: __u32,
+    pub valid: __u32,
+    pub attributes: __u32,
+    pub flags: __u32,
+    pub created_at_sec: __s64,
+    pub created_at_nsec: __u32,
+    pub __pad: __u32,
+}
+#[test]
+fn bindgen_test_layout_kacs_sattr() {
+    const UNINIT: ::core::mem::MaybeUninit<kacs_sattr> = ::core::mem::MaybeUninit::uninit();
+    let ptr = UNINIT.as_ptr();
+    assert_eq!(
+        ::core::mem::size_of::<kacs_sattr>(),
+        32usize,
+        concat!("Size of: ", stringify!(kacs_sattr))
+    );
+    assert_eq!(
+        ::core::mem::align_of::<kacs_sattr>(),
+        8usize,
+        concat!("Alignment of ", stringify!(kacs_sattr))
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).version) as usize - ptr as usize },
+        0usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(version)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).valid) as usize - ptr as usize },
+        4usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(valid)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).attributes) as usize - ptr as usize },
+        8usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(attributes)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).flags) as usize - ptr as usize },
+        12usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(flags)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).created_at_sec) as usize - ptr as usize },
+        16usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(created_at_sec)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).created_at_nsec) as usize - ptr as usize },
+        24usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(created_at_nsec)
+        )
+    );
+    assert_eq!(
+        unsafe { ::core::ptr::addr_of!((*ptr).__pad) as usize - ptr as usize },
+        28usize,
+        concat!(
+            "Offset of field: ",
+            stringify!(kacs_sattr),
+            "::",
+            stringify!(__pad)
         )
     );
 }

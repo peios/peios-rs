@@ -42,6 +42,9 @@
 #define KACS_TR_CHANGE_NOTIFY_PRIV 13U /* traverse via CHANGE_NOTIFY priv */
 #define KACS_TR_CHANGE_NOTIFY_PRIV_EXHAUSTED \
 	14U /* CHANGE_NOTIFY priv use exhausted */
+#define KACS_TR_NT_SHARE 15U /* NT share registration refused the open */
+#define KACS_TR_NT_SHARE_OVERRIDE \
+	16U /* backup/restore intent set a share denial aside */
 
 /*
  * kacs_sd_cache reason — the inode security-descriptor cache outcome. The

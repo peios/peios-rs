@@ -46,6 +46,14 @@
 #define SYS_KACS_SET_MOUNT_POLICY 1027
 #define SYS_KACS_ACCESS_CHECK_SUBJECT 1028
 
+/* KACS — NT handle semantics: open state, deletion, renaming, locks, leases. */
+#define SYS_KACS_QUERY_OPEN 1029
+#define SYS_KACS_SET_DISPOSITION 1030
+#define SYS_KACS_RENAME 1031
+#define SYS_KACS_LOCK 1032
+#define SYS_KACS_CREATE_LEASE_MANAGER 1033
+#define SYS_KACS_LEASE 1034
+
 /* KMES — kernel-mediated event stream. */
 #define SYS_KMES_EMIT 1090
 #define SYS_KMES_ATTACH 1091

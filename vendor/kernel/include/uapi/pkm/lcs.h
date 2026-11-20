@@ -331,10 +331,10 @@ struct reg_src_hive_entry {
 #define REG_IOC_TXN_STATUS \
 	_IOR(REG_IOC_TYPE, REG_IOC_TXN_STATUS_NR, struct reg_txn_status_args)
 
-#define REG_IOC_QUERY_KEY_INFO_TRANSACTED \
+#define REG_IOC_QUERY_KEY_INFO_TRANSACTED                         \
 	_IOWR(REG_IOC_TYPE, REG_IOC_QUERY_KEY_INFO_TRANSACTED_NR, \
 	      struct reg_read_transacted_args)
-#define REG_IOC_GET_SECURITY_TRANSACTED \
+#define REG_IOC_GET_SECURITY_TRANSACTED                         \
 	_IOWR(REG_IOC_TYPE, REG_IOC_GET_SECURITY_TRANSACTED_NR, \
 	      struct reg_read_transacted_args)
 
