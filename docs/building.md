@@ -16,8 +16,9 @@ declared inputs.
 `peios-sys` binds libpeios with bindgen and links it. Pekit builds libpeios
 and its headers from the Peios SDK's own files, through the SDK's GCSL
 library, which `build.gcsl` imports. `pekit lock` pins the SDK's commit,
-and the gcslib libraries', in `pekit.lock`. Use libpeios 0.5.14 or later:
-the Registry read-snapshot entry points require that version.
+and the gcslib libraries', in `pekit.lock`. Use libpeios 0.5.15 or later:
+the NT handle calls (sharing, deletion and renaming through a handle,
+locks, leases and special attributes) require that version.
 
 ## Test
 

@@ -8,15 +8,20 @@ use std::ffi::CString;
 
 /// A group SID and its KACS_SID_GROUP_* flags, including enabled/deny-only state.
 pub struct SubjectGroup<'a> {
+    /// The group's SID.
     pub sid: &'a SidRef,
+    /// Its `KACS_SID_GROUP_*` attributes.
     pub attributes: u32,
 }
 
 /// Whether an omitted claim is absent or remains undisclosed/unknown.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ClaimCoverage {
+    /// Only the disclosed values and listed absences are known; any other
+    /// claim may exist.
     #[default]
     Partial,
+    /// Every claim is disclosed: a claim not given is absent.
     Complete,
 }
 
@@ -27,8 +32,11 @@ pub enum ClaimCoverage {
 /// Partial knowledge. Filtered results never establish additional absences.
 #[derive(Default)]
 pub struct SuppliedClaims<'a> {
+    /// The disclosed claims and their values.
     pub values: &'a [Claim],
+    /// Claim names known to be absent.
     pub absent: &'a [&'a str],
+    /// Whether claims not given are absent or unknown.
     pub coverage: ClaimCoverage,
 }
 
@@ -36,11 +44,17 @@ pub struct SuppliedClaims<'a> {
 /// These facts convey no authority to impersonate, install or mint OS tokens.
 #[derive(Default)]
 pub struct SuppliedSubject<'a> {
+    /// The principal's SID.
     pub user: Option<&'a SidRef>,
+    /// The principal's groups.
     pub groups: Option<&'a [SubjectGroup<'a>]>,
+    /// The principal's user claims.
     pub user_claims: Option<SuppliedClaims<'a>>,
+    /// The device's groups, for compound identities.
     pub device_groups: Option<&'a [SubjectGroup<'a>]>,
+    /// The device's claims.
     pub device_claims: Option<SuppliedClaims<'a>>,
+    /// Claims local to this check.
     pub local_claims: Option<SuppliedClaims<'a>>,
 }
 
@@ -48,15 +62,26 @@ bitflags::bitflags! {
     /// Missing input categories. Claim names and restricted values are not exposed.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct MissingSubjectContext: u32 {
+        /// The principal's SID.
         const USER = sys::PEIOS_SUBJECT_MISSING_USER;
+        /// The principal's groups.
         const GROUPS = sys::PEIOS_SUBJECT_MISSING_GROUPS;
+        /// The principal's user claims.
         const USER_CLAIMS = sys::PEIOS_SUBJECT_MISSING_USER_CLAIMS;
+        /// The device's groups.
         const DEVICE_GROUPS = sys::PEIOS_SUBJECT_MISSING_DEVICE_GROUPS;
+        /// The device's claims.
         const DEVICE_CLAIMS = sys::PEIOS_SUBJECT_MISSING_DEVICE_CLAIMS;
+        /// Claims local to the check.
         const LOCAL_CLAIMS = sys::PEIOS_SUBJECT_MISSING_LOCAL_CLAIMS;
+        /// The SID that stands for `PRINCIPAL_SELF`, where an ACE names it.
         const SELF = sys::PEIOS_SUBJECT_MISSING_SELF;
+        /// The object-type list.
         const OBJECT_TYPES = sys::PEIOS_SUBJECT_MISSING_OBJECT_TYPES;
+        /// Execution context, such as privileges, integrity or confinement,
+        /// that a supplied identity cannot carry.
         const EXECUTION_CONTEXT = sys::PEIOS_SUBJECT_MISSING_EXECUTION_CONTEXT;
+        /// An audit context, needed while auditing is active.
         const AUDIT_CONTEXT = sys::PEIOS_SUBJECT_MISSING_AUDIT_CONTEXT;
     }
 }
@@ -65,9 +90,21 @@ bitflags::bitflags! {
 /// provisional grant; the caller can request more facts or deny access.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubjectAccessDecision {
-    Granted { granted: AccessMask },
-    Denied { granted: AccessMask },
-    MissingContext { missing: MissingSubjectContext },
+    /// Every requested right is granted.
+    Granted {
+        /// The rights granted.
+        granted: AccessMask,
+    },
+    /// A requested right is denied.
+    Denied {
+        /// The rights that were granted, short of the request.
+        granted: AccessMask,
+    },
+    /// The facts given are not enough to decide.
+    MissingContext {
+        /// The kinds of facts the decision needs.
+        missing: MissingSubjectContext,
+    },
 }
 
 struct ClaimsStorage {
@@ -325,7 +362,7 @@ mod tests {
         expression.extend_from_slice(&(utf16.len() as u32).to_le_bytes());
         expression.extend_from_slice(&utf16);
         expression.push(0x8d); // Not_Exists
-        while expression.len() % 4 != 0 {
+        while !expression.len().is_multiple_of(4) {
             expression.push(0);
         }
         let acl = AclBuilder::new()

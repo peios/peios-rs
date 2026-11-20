@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/peios/kernel",
-  "commit": "db758a6e96913a49adbf9c992f65cd57a66ea9f7",
+  "commit": "d75247ee23d8a7a10175e580e0af78c0688eff2b",
   "paths": [
     "include/uapi/pkm",
     "peios/rust/peios-uapi",
@@ -17,10 +17,10 @@
     "LICENSES/preferred/GPL-2.0": "8780e78a1a737e127f25a65f6d95269bffd36158dc261114de7859b490bfc5aa",
     "LICENSES/preferred/MIT": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
     "include/uapi/pkm/access.h": "edfb35d222383b7223cc45676f311b09ea155c293e0d6f064df1f1bf6ef289a7",
-    "include/uapi/pkm/file.h": "d98b049c49f059bb6c75d4d922e6fc0d22a8452014ae9d6f7f093c586cdeb1ea",
+    "include/uapi/pkm/file.h": "744960559dc7d19b3d39d607609c5ba1e86e5990168d017b371c49a05e64a220",
     "include/uapi/pkm/ipc.h": "02d56f2012c94cdff216a846c684d88fa2755bf287ded56bcd1d278534e57370",
     "include/uapi/pkm/kmes.h": "5949ee53edf6f1c2ad6d68f084a6868aff08137d881e12471fb45bac2101c7f1",
-    "include/uapi/pkm/lcs.h": "f9fcd57bde25aaacb016da3990fac296b1538370fa5839b68df415d0f9f48221",
+    "include/uapi/pkm/lcs.h": "ac4cc248ab29897a6528fcf62d8ed84c2e10df238a326f67164e46beed067ac3",
     "include/uapi/pkm/mntns.h": "fda3ca62196df9a52123cfe40f2fa81eba2707cb1c93359fa5fecf7f25a6b109",
     "include/uapi/pkm/net.h": "7795adfb47dadc1747258cf61b60180c9e6657027ad3f8d6a3ab8aef47255462",
     "include/uapi/pkm/ntfe.h": "ab881b215fcacedd8d8eb2d9fd11e823866445a4126527f2a6330686df164e50",
@@ -30,17 +30,17 @@
     "include/uapi/pkm/sd.h": "b69997b8dd5a285b231b33488194f1e9b8e4e5e768784f7df5d9905475f0b143",
     "include/uapi/pkm/sid.h": "a50c66b2d5bd67a1774e806a7b4390846d9b13789c4fc6acf5affdb3b08bcb73",
     "include/uapi/pkm/socket.h": "530c1be99a909bbc27913a435adf74bf674dae322928c148af9663a8e0af2ea0",
-    "include/uapi/pkm/syscall.h": "20eb379edee34a69e14442d8da8b40767fb6fe51772846e76219f39a0c304ea2",
-    "include/uapi/pkm/token.h": "a2ac38f6bca1edff709db626408238550746234dba3f92675ce30720cb50a891",
-    "include/uapi/pkm/trace.h": "e052325d03600f63063591d4ce1fd6f43c6892998cf8dd4d8ce982479f3dbebb",
+    "include/uapi/pkm/syscall.h": "b09c5a0322b106d7dff0a954e508ad3f6081af187fa01d1b24d254968c2a51db",
+    "include/uapi/pkm/token.h": "c0b2c7f1dc360f647842ca047600e02f4732f6f817ad9d7152fe1efbe4ce7adb",
+    "include/uapi/pkm/trace.h": "05735fd35e11d69f110cc9d4a09e6645f73d23ecbd66982f9accb8dac1f6109d",
     "peios/rust/peios-uapi/Cargo.toml": "fb465c8df848b862f86c36ff21853d6ef0fa8f329080164009dfaa0fd68a69c0",
     "peios/rust/peios-uapi/check-codegen-safe.sh": "b9e7a664e36c78dcf745c2fcef337d27dfa51cad9563b224bdb4b668e2c6fede",
     "peios/rust/peios-uapi/check-userspace-clean.sh": "a51eca4125aa3c3fb0d9fb5dad8661116aa5260803b83f251203224d7d4e43ac",
     "peios/rust/peios-uapi/gen.sh": "73ae20a49728430acbd6a75a452628b45a5dc789958e4f2ab06c32af969c29a1",
     "peios/rust/peios-uapi/lib.rs": "e623ce8246cca4de4778d2a507a9774e6344d814dc2b3133e2da20a5f136aab1",
     "peios/rust/peios-uapi/smoke_test.c": "9f5ed31a1b7bf62ae8df7ad49502afa77548ca97d473682b7cc1ce471d863d92",
-    "peios/rust/peios-uapi/ztypes.rs": "4eb75f889776a2b54fd71fce0c36737d425b2a6624f9ccdc69b8a1e235efb412",
-    "security/pkm/kacs/peios_uapi.rs": "c16af87b97f5c9d322ede20cd4d23603423e0ad210a0a1caf13720f1f77abdb8"
+    "peios/rust/peios-uapi/ztypes.rs": "c128884a7adfa2f3a2699a4fd86a400e7218a27305dcd1d3d3d1e017997d7cb7",
+    "security/pkm/kacs/peios_uapi.rs": "b46b828be6d7bb04adbeaf06775110e80bcfc997aae7b803d37ee2bcf917bf0a"
   },
   "file_modes": {
     "LICENSES/dual/Apache-2.0": "100644",
