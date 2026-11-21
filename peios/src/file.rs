@@ -37,7 +37,7 @@ use peios_sys as sys;
 
 use crate::error::{Error, Result};
 use crate::security::{GenericMapping, SecurityDescriptor};
-use crate::util::{check, check_fd, check_len, opt_fd, probe};
+use crate::util::{check, check_fd, check_len, opt_dirfd, probe};
 
 bitflags! {
     /// A file/directory desired-access mask: the file-object rights plus the
@@ -353,7 +353,7 @@ impl<'a> OpenOptions<'a> {
         // creator-SD bytes (kept alive by `self`) for the call; `status`
         // writable. Returns an owned file fd or -1/errno.
         let fd = check_fd(unsafe {
-            sys::peios_file_open(opt_fd(dirfd), cpath.as_ptr(), &params, &mut status)
+            sys::peios_file_open(opt_dirfd(dirfd), cpath.as_ptr(), &params, &mut status)
         })
         .map_err(|e| e.with_open_failure(OpenFailure::from_raw(status)))?;
         let status =
@@ -512,7 +512,7 @@ pub fn get_sd(
         // SAFETY: live NUL-terminated path; (buf, cap) is the output window.
         unsafe {
             sys::peios_file_get_sd(
-                opt_fd(dirfd),
+                opt_dirfd(dirfd),
                 cpath.as_ptr(),
                 secinfo.bits(),
                 buf,
@@ -539,7 +539,7 @@ pub fn set_sd(
     // SAFETY: live NUL-terminated path; `bytes` (ptr, len) from a live slice.
     check(unsafe {
         sys::peios_file_set_sd(
-            opt_fd(dirfd),
+            opt_dirfd(dirfd),
             cpath.as_ptr(),
             secinfo.bits(),
             bytes.as_ptr().cast(),
@@ -992,7 +992,7 @@ impl File {
             .map_err(|_| Error::from_raw_os_error(EINVAL))?;
         // SAFETY: live fd; live NUL-terminated path.
         check(unsafe {
-            sys::peios_file_rename(self.raw(), opt_fd(dirfd), cpath.as_ptr(), flags.bits())
+            sys::peios_file_rename(self.raw(), opt_dirfd(dirfd), cpath.as_ptr(), flags.bits())
         })
     }
 
@@ -1137,7 +1137,7 @@ pub fn special_attributes(
     let mut raw = empty_sattr();
     // SAFETY: live NUL-terminated path; `raw` writable.
     check(unsafe {
-        sys::peios_file_get_sattr(opt_fd(dirfd), cpath.as_ptr(), &mut raw, at_flags as u32)
+        sys::peios_file_get_sattr(opt_dirfd(dirfd), cpath.as_ptr(), &mut raw, at_flags as u32)
     })?;
     Ok(SpecialAttributes::from_raw(&raw))
 }
@@ -1200,7 +1200,9 @@ fn set_sattr_at(
     let cpath =
         CString::new(path.as_os_str().as_bytes()).map_err(|_| Error::from_raw_os_error(EINVAL))?;
     // SAFETY: live NUL-terminated path; `raw` readable.
-    check(unsafe { sys::peios_file_set_sattr(opt_fd(dirfd), cpath.as_ptr(), raw, at_flags as u32) })
+    check(unsafe {
+        sys::peios_file_set_sattr(opt_dirfd(dirfd), cpath.as_ptr(), raw, at_flags as u32)
+    })
 }
 
 /// A file's creation date by path: its Created At if set, else its birth time.
@@ -1216,7 +1218,7 @@ pub fn creation_time(
     // SAFETY: live NUL-terminated path; outputs writable.
     check(unsafe {
         sys::peios_file_creation_time(
-            opt_fd(dirfd),
+            opt_dirfd(dirfd),
             cpath.as_ptr(),
             &mut sec,
             &mut nsec,
