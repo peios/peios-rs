@@ -44,10 +44,20 @@ pub(crate) fn check_len(ret: isize) -> Result<usize> {
 }
 
 /// The raw fd of an optional borrowed handle, using libpeios' `-1` sentinel for
-/// "none" (the convention for `dirfd`, `txn_fd`, `token_fd`, `pidfd`, …).
+/// "none" (the convention for `txn_fd`, `token_fd`, `pidfd`, …). Not for a
+/// directory a path is resolved against: see [`opt_dirfd`].
 #[inline]
 pub(crate) fn opt_fd(fd: Option<BorrowedFd<'_>>) -> RawFd {
     fd.map_or(-1, |f| f.as_raw_fd())
+}
+
+/// The raw fd of the directory a path is resolved against, `None` meaning the
+/// process's current directory. The kernel takes that as `AT_FDCWD`, as every
+/// `*at` call does; `-1` would be a bad descriptor, and a relative path would
+/// fail with `EBADF`.
+#[inline]
+pub(crate) fn opt_dirfd(dirfd: Option<BorrowedFd<'_>>) -> RawFd {
+    dirfd.map_or(libc::AT_FDCWD, |f| f.as_raw_fd())
 }
 
 use std::os::fd::AsRawFd;
@@ -110,3 +120,26 @@ where
 /// `ERANGE` / `EINVAL` using the platform definition.
 const ERANGE: i32 = libc::ERANGE;
 const EINVAL: i32 = libc::EINVAL;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::fd::AsFd;
+
+    #[test]
+    fn no_dirfd_is_the_current_directory() {
+        assert_eq!(opt_dirfd(None), libc::AT_FDCWD);
+    }
+
+    #[test]
+    fn no_other_fd_is_none() {
+        assert_eq!(opt_fd(None), -1);
+    }
+
+    #[test]
+    fn a_given_fd_is_passed_as_it_is() {
+        let file = std::fs::File::open("/").unwrap();
+        assert_eq!(opt_dirfd(Some(file.as_fd())), file.as_raw_fd());
+        assert_eq!(opt_fd(Some(file.as_fd())), file.as_raw_fd());
+    }
+}
